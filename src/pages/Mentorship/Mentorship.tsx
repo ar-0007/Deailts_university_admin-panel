@@ -14,8 +14,8 @@ import {
 } from '@heroicons/react/24/outline';
 import mentorshipService, { type MentorshipRequest, type MentorshipSlot } from '../../services/mentorshipService';
 import Button from '../../components/ui/Button';
-import Card from '../../components/ui/Card';
-import LoadingSpinner from '../../components/ui/LoadingSpinner';
+// import Card from '../../components/ui/Card';
+// import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 // Define booking interface for consistency
 interface MentorshipBooking {

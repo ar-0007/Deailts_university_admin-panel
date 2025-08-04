@@ -4,7 +4,7 @@ import type { AxiosInstance, AxiosResponse } from 'axios';
 // Create axios instance with base configuration
 const api: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api',
-  timeout: 10000,
+  timeout: 3000000, // 5 minutes for file uploads
   headers: {
     'Content-Type': 'application/json',
   },

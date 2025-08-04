@@ -2,6 +2,7 @@
 import api from './api';
 
 export interface MentorshipRequest {
+  created_at: string | number | Date;
   request_id: string;
   user_id: string;
   message: string;

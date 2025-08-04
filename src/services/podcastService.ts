@@ -4,7 +4,7 @@ import api from './api';
 export interface Podcast {
   podcast_id: string;
   title: string;
-  description: string;
+  description?: string;
   video_url: string;
   thumbnail_url?: string;
   duration?: number; // in seconds
@@ -12,12 +12,15 @@ export interface Podcast {
   published_at?: string;
   created_at: string;
   updated_at: string;
+  // Keep only the basic fields that the backend actually provides
+  plays_count?: number;
+  likes_count?: number;
 }
 
 export interface CreatePodcastData {
   title: string;
-  description: string;
-  status: 'draft' | 'published';
+  description?: string;
+  status?: 'draft' | 'published';
 }
 
 export interface UploadResponse {
@@ -66,22 +69,22 @@ class PodcastService {
     try {
       const formData = new FormData();
       formData.append('title', podcastData.title);
-      formData.append('description', podcastData.description);
-      formData.append('status', podcastData.status);
+      if (podcastData.description) formData.append('description', podcastData.description);
+      formData.append('status', podcastData.status || 'draft');
       formData.append('video', videoFile);
       
       if (thumbnailFile) {
         formData.append('thumbnail', thumbnailFile);
       }
 
-      const response = await api.post(this.baseURL, formData, {
+      const response = await api.post(`${this.baseURL}/upload`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
         onUploadProgress: (progressEvent) => {
           if (onProgress && progressEvent.total) {
             const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            onProgress({ video: progress });
+            onProgress({ video: progress, thumbnail: progress });
           }
         },
       });
@@ -92,11 +95,26 @@ class PodcastService {
     }
   }
 
+  async createPodcastWithUrls(podcastData: CreatePodcastData & {
+    video_url: string;
+    thumbnail_url?: string;
+    duration?: number;
+  }): Promise<Podcast> {
+    try {
+      const response = await api.post(this.baseURL, podcastData);
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Error creating podcast with URLs:', error);
+      throw new Error(error.response?.data?.error?.message || 'Failed to create podcast');
+    }
+  }
+
   async updatePodcast(
     id: string,
     podcastData: Partial<CreatePodcastData>,
     videoFile?: File | null,
-    thumbnailFile?: File | null
+    thumbnailFile?: File | null,
+    onProgress?: (progress: UploadProgress) => void
   ): Promise<Podcast> {
     try {
       const formData = new FormData();
@@ -107,14 +125,37 @@ class PodcastService {
       if (videoFile) formData.append('video', videoFile);
       if (thumbnailFile) formData.append('thumbnail', thumbnailFile);
 
-      const response = await api.put(`${this.baseURL}/${id}`, formData, {
+      const response = await api.put(`${this.baseURL}/${id}/upload`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          if (onProgress && progressEvent.total) {
+            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            onProgress({ video: progress, thumbnail: progress });
+          }
         },
       });
       return response.data.data;
     } catch (error: any) {
       console.error('Error updating podcast:', error);
+      throw new Error(error.response?.data?.error?.message || 'Failed to update podcast');
+    }
+  }
+
+  async updatePodcastWithUrls(
+    id: string,
+    podcastData: Partial<CreatePodcastData & {
+      video_url?: string;
+      thumbnail_url?: string;
+      duration?: number;
+    }>
+  ): Promise<Podcast> {
+    try {
+      const response = await api.put(`${this.baseURL}/${id}`, podcastData);
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Error updating podcast with URLs:', error);
       throw new Error(error.response?.data?.error?.message || 'Failed to update podcast');
     }
   }
@@ -129,6 +170,27 @@ class PodcastService {
     }
   }
 
+  async publishPodcast(id: string): Promise<Podcast> {
+    try {
+      const response = await api.patch(`${this.baseURL}/${id}/publish`);
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Error publishing podcast:', error);
+      throw new Error(error.response?.data?.error?.message || 'Failed to publish podcast');
+    }
+  }
+
+  async archivePodcast(id: string): Promise<Podcast> {
+    try {
+      const response = await api.patch(`${this.baseURL}/${id}/archive`);
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Error archiving podcast:', error);
+      throw new Error(error.response?.data?.error?.message || 'Failed to archive podcast');
+    }
+  }
+
+  // Legacy upload methods for backward compatibility
   async uploadVideo(file: File, onProgress?: (progress: number) => void): Promise<UploadResponse> {
     try {
       const formData = new FormData();
@@ -174,6 +236,27 @@ class PodcastService {
       throw new Error(error.response?.data?.error?.message || 'Failed to upload image');
     }
   }
+
+  // Get published podcasts only
+  async getPublishedPodcasts(): Promise<Podcast[]> {
+    return this.getAllPodcasts('published');
+  }
+
+  // Get draft podcasts only
+  async getDraftPodcasts(): Promise<Podcast[]> {
+    return this.getAllPodcasts('draft');
+  }
+
+  // Get archived podcasts only
+  async getArchivedPodcasts(): Promise<Podcast[]> {
+    return this.getAllPodcasts('archived');
+  }
+
+  // Remove these analytics methods since backend doesn't support them:
+  // - incrementViews
+  // - toggleLike  
+  // - incrementPlays
+  // - getPodcastAnalytics
 }
 
 const podcastService = new PodcastService();

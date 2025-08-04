@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   PlusIcon,
   MagnifyingGlassIcon,
@@ -8,15 +8,14 @@ import {
   EyeIcon,
   PencilIcon,
   TrashIcon,
-  CalendarIcon,
-  ClockIcon,
-  SpeakerWaveIcon,
   HeartIcon,
-  XMarkIcon
+  XMarkIcon,
+  ClockIcon,
+  SpeakerWaveIcon
 } from '@heroicons/react/24/outline';
+import { HeartIcon as HeartSolidIcon } from '@heroicons/react/24/solid';
 import podcastService, { type Podcast, type CreatePodcastData } from '../../services/podcastService';
 import Button from '../../components/ui/Button';
-import Card from '../../components/ui/Card';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 const Podcasts: React.FC = () => {
@@ -24,18 +23,22 @@ const Podcasts: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterCategory, setFilterCategory] = useState<string>('all');
   const [playingPodcast, setPlayingPodcast] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingPodcast, setEditingPodcast] = useState<Podcast | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState('');
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState({ video: 0, thumbnail: 0 });
   const [isUploading, setIsUploading] = useState(false);
+  const [likedPodcasts, setLikedPodcasts] = useState<Set<string>>(new Set());
+  const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
 
-  // Form state for new podcast
-  const [newPodcast, setNewPodcast] = useState<CreatePodcastData>({
+  // Form state for new/edit podcast
+  const [podcastForm, setPodcastForm] = useState<CreatePodcastData>({
     title: '',
     description: '',
     status: 'draft'
@@ -58,12 +61,60 @@ const Podcasts: React.FC = () => {
     fetchPodcasts();
   }, []);
 
+  // Handle video play/pause
+  const togglePlay = async (podcast: Podcast) => {
+    const videoElement = videoRefs.current[podcast.podcast_id];
+    if (!videoElement) return;
+
+    if (playingPodcast === podcast.podcast_id) {
+      videoElement.pause();
+      setPlayingPodcast(null);
+    } else {
+      // Pause other videos
+      Object.values(videoRefs.current).forEach(video => {
+        if (video && !video.paused) {
+          video.pause();
+        }
+      });
+      
+      // Simply play the video without tracking views
+      videoElement.play();
+      setPlayingPodcast(podcast.podcast_id);
+    }
+  };
+
+  // Handle like toggle
+  const toggleLike = async (podcastId: string) => {
+    try {
+      const result = await podcastService.toggleLike(podcastId);
+      
+      // Update local state
+      setPodcasts(prev => prev.map(p => 
+        p.podcast_id === podcastId 
+          ? { ...p, likes_count: result.likes_count }
+          : p
+      ));
+      
+      // Update liked state
+      setLikedPodcasts(prev => {
+        const newSet = new Set(prev);
+        if (result.liked) {
+          newSet.add(podcastId);
+        } else {
+          newSet.delete(podcastId);
+        }
+        return newSet;
+      });
+    } catch (err: any) {
+      setError(err.message || 'Failed to toggle like');
+    }
+  };
+
   // Handle podcast creation
   const handleCreatePodcast = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate required fields
-    if (!newPodcast.title.trim()) {
+    if (!podcastForm.title.trim()) {
       setError('Podcast title is required');
       return;
     }
@@ -78,9 +129,8 @@ const Podcasts: React.FC = () => {
     setError('');
 
     try {
-      // Create podcast with uploaded media URLs
       const createdPodcast = await podcastService.createPodcast(
-        newPodcast,
+        podcastForm,
         videoFile,
         thumbnailFile,
         (progress) => {
@@ -91,16 +141,7 @@ const Podcasts: React.FC = () => {
       if (createdPodcast) {
         setPodcasts(prev => [createdPodcast, ...prev]);
         setShowAddModal(false);
-        setNewPodcast({
-          title: '',
-          description: '',
-          status: 'draft'
-        });
-        setVideoFile(null);
-        setThumbnailFile(null);
-        setUploadProgress({ video: 0, thumbnail: 0 });
-      } else {
-        setError('Failed to create podcast');
+        resetForm();
       }
     } catch (err: any) {
       setError(err.message || 'Failed to create podcast');
@@ -110,92 +151,112 @@ const Podcasts: React.FC = () => {
     }
   };
 
+  // Handle podcast update
+  const handleUpdatePodcast = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPodcast) return;
+    
+    setIsUpdating(true);
+    setError('');
+
+    try {
+      const updatedPodcast = await podcastService.updatePodcast(
+        editingPodcast.podcast_id,
+        podcastForm
+      );
+
+      setPodcasts(prev => prev.map(p => 
+        p.podcast_id === editingPodcast.podcast_id ? updatedPodcast : p
+      ));
+      setShowEditModal(false);
+      setEditingPodcast(null);
+      resetForm();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update podcast');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Handle podcast deletion
   const handleDeletePodcast = async (podcastId: string) => {
     if (!confirm('Are you sure you want to delete this podcast?')) return;
 
     try {
-      const success = await podcastService.deletePodcast(podcastId);
-      if (success) {
-        setPodcasts(prev => prev.filter(podcast => podcast.podcast_id !== podcastId));
-      } else {
-        setError('Failed to delete podcast');
-      }
+      await podcastService.deletePodcast(podcastId);
+      setPodcasts(prev => prev.filter(podcast => podcast.podcast_id !== podcastId));
     } catch (err: any) {
       setError(err.message || 'Failed to delete podcast');
     }
   };
 
+  // Open edit modal
+  const openEditModal = (podcast: Podcast) => {
+    setEditingPodcast(podcast);
+    setPodcastForm({
+      title: podcast.title,
+      description: podcast.description || '',
+      status: podcast.status === 'archived' ? 'draft' : podcast.status
+    });
+    setShowEditModal(true);
+  };
+
+  // Reset form
+  const resetForm = () => {
+    setPodcastForm({
+      title: '',
+      description: '',
+      status: 'draft'
+    });
+    setVideoFile(null);
+    setThumbnailFile(null);
+    setUploadProgress({ video: 0, thumbnail: 0 });
+  };
+
+  // Format duration
   const formatDuration = (seconds: number) => {
+    if (!seconds) return '0:00';
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
-  const getStatusBadge = (status: string) => {
-    const statusStyles = {
-      draft: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
-      published: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-      archived: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-    };
-
-    return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyles[status as keyof typeof statusStyles]}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </span>
-    );
-  };
-
-  const getCategoryBadge = (category: string) => {
-    const categoryStyles = {
-      Technical: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-      Business: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-      Interview: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-      Tips: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-    };
-
-    return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${categoryStyles[category as keyof typeof categoryStyles] || 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'}`}>
-        {category}
-      </span>
-    );
+  // Format view count
+  const formatCount = (count: number) => {
+    if (count >= 1000000) {
+      return `${(count / 1000000).toFixed(1)}M`;
+    } else if (count >= 1000) {
+      return `${(count / 1000).toFixed(1)}K`;
+    }
+    return count.toString();
   };
 
   const filteredPodcasts = podcasts.filter(podcast => {
     const matchesSearch = 
       podcast.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      podcast.description.toLowerCase().includes(searchTerm.toLowerCase());
+      (podcast.description && podcast.description.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesStatus = filterStatus === 'all' || podcast.status === filterStatus;
-    const matchesCategory = filterCategory === 'all' || podcast.category === filterCategory;
     
-    return matchesSearch && matchesStatus && matchesCategory;
+    return matchesSearch && matchesStatus;
   });
 
   const getStats = () => {
     return {
       total: podcasts.length,
       published: podcasts.filter(p => p.status === 'published').length,
-      totalPlays: podcasts.reduce((sum, p) => sum + p.plays_count, 0),
-      totalLikes: podcasts.reduce((sum, p) => sum + p.likes_count, 0),
-      avgDuration: Math.round(podcasts.reduce((sum, p) => sum + p.duration, 0) / podcasts.length / 60)
+      totalPlays: podcasts.reduce((sum, p) => sum + (p.plays_count || 0), 0),
+      totalLikes: podcasts.reduce((sum, p) => sum + (p.likes_count || 0), 0),
+      avgDuration: podcasts.length > 0 ? Math.round(podcasts.reduce((sum, p) => sum + (p.duration || 0), 0) / podcasts.length / 60) : 0
     };
   };
 
   const stats = getStats();
-  const categories = ['Technical', 'Business', 'Interview', 'Tips'];
-
-  const togglePlay = (podcastId: string) => {
-    if (playingPodcast === podcastId) {
-      setPlayingPodcast(null);
-    } else {
-      setPlayingPodcast(podcastId);
-    }
-  };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+        <LoadingSpinner />
       </div>
     );
   }
@@ -205,9 +266,9 @@ const Podcasts: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Podcasts</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Video Feed</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Manage your podcast episodes and audio content
+            YouTube-like video content management
           </p>
         </div>
         <button 
@@ -215,7 +276,7 @@ const Podcasts: React.FC = () => {
           className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
         >
           <PlusIcon className="w-5 h-5 mr-2" />
-          Upload Podcast
+          Upload Video
         </button>
       </div>
 
@@ -252,7 +313,7 @@ const Podcasts: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Plays</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalPlays.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCount(stats.totalPlays)}</p>
             </div>
           </div>
         </div>
@@ -264,7 +325,7 @@ const Podcasts: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Likes</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalLikes}</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCount(stats.totalLikes)}</p>
             </div>
           </div>
         </div>
@@ -282,7 +343,7 @@ const Podcasts: React.FC = () => {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Search and Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
@@ -290,7 +351,7 @@ const Podcasts: React.FC = () => {
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search podcasts..."
+                placeholder="Search videos..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -309,143 +370,163 @@ const Podcasts: React.FC = () => {
               <option value="draft">Draft</option>
               <option value="archived">Archived</option>
             </select>
-
-            <select
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">All Categories</option>
-              {categories.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
-            </select>
           </div>
         </div>
       </div>
 
-      {/* Podcasts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* YouTube-like Video Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {filteredPodcasts.map((podcast) => (
-          <div key={podcast.podcast_id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-lg transition-shadow">
-            <div className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    {podcast.title}
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-3">
-                    {podcast.description}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 mb-4">
-                {getStatusBadge(podcast.status)}
-                {getCategoryBadge(podcast.category)}
-              </div>
-
-              {/* Audio Player */}
-              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-4">
-                <div className="flex items-center justify-between">
+          <div key={podcast.podcast_id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-lg transition-all duration-200 group">
+            {/* Video Thumbnail/Player */}
+            <div className="relative aspect-video bg-gray-900 overflow-hidden">
+              {/* Thumbnail */}
+              {podcast.thumbnail_url && playingPodcast !== podcast.podcast_id && (
+                <img
+                  src={podcast.thumbnail_url}
+                  alt={podcast.title}
+                  className="w-full h-full object-cover"
+                />
+              )}
+              
+              {/* Video Player */}
+              <video
+                ref={(el) => {
+                  if (el) {
+                    videoRefs.current[podcast.podcast_id] = el;
+                  }
+                }}
+                src={podcast.video_url}
+                className={`w-full h-full object-cover ${
+                  playingPodcast === podcast.podcast_id ? 'block' : 'hidden'
+                }`}
+                controls={playingPodcast === podcast.podcast_id}
+                onEnded={() => setPlayingPodcast(null)}
+                onPause={() => setPlayingPodcast(null)}
+              />
+              
+              {/* Play Button Overlay */}
+              {playingPodcast !== podcast.podcast_id && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 group-hover:bg-opacity-50 transition-all duration-200">
                   <button
-                    onClick={() => togglePlay(podcast.podcast_id)}
-                    className="flex items-center justify-center w-12 h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors"
+                    onClick={() => togglePlay(podcast)}
+                    className="flex items-center justify-center w-16 h-16 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full transition-all duration-200 transform hover:scale-110"
                   >
-                    {playingPodcast === podcast.podcast_id ? (
-                      <PauseIcon className="w-6 h-6" />
-                    ) : (
-                      <PlayIcon className="w-6 h-6 ml-1" />
-                    )}
+                    <PlayIcon className="w-8 h-8 text-gray-900 ml-1" />
                   </button>
-                  
-                  <div className="flex-1 mx-4">
-                    <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                      <div className="bg-blue-600 h-2 rounded-full" style={{ width: '0%' }}></div>
-                    </div>
+                </div>
+              )}
+              
+              {/* Duration Badge */}
+              {podcast.duration && (
+                <div className="absolute bottom-2 right-2 bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded">
+                  {formatDuration(podcast.duration)}
+                </div>
+              )}
+              
+              {/* Status Badge */}
+              <div className="absolute top-2 left-2">
+                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                  podcast.status === 'published' 
+                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                    : podcast.status === 'draft'
+                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                    : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                }`}>
+                  {podcast.status.charAt(0).toUpperCase() + podcast.status.slice(1)}
+                </span>
+              </div>
+            </div>
+            
+            {/* Video Info */}
+            <div className="p-4">
+              <h3 className="font-semibold text-gray-900 dark:text-white text-sm line-clamp-2 mb-2">
+                {podcast.title}
+              </h3>
+              
+              {podcast.description && (
+                <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 mb-3">
+                  {podcast.description}
+                </p>
+              )}
+              
+              {/* Views and Likes */}
+              <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-3">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1">
+                    <EyeIcon className="w-3 h-3" />
+                    <span>{formatCount(podcast.plays_count || 0)} views</span>
                   </div>
-                  
-                  <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">
-                    {formatDuration(podcast.duration)}
-                  </span>
+                  <div className="flex items-center gap-1">
+                    <HeartIcon className="w-3 h-3" />
+                    <span>{formatCount(podcast.likes_count || 0)} likes</span>
+                  </div>
                 </div>
               </div>
-
-              <div className="grid grid-cols-3 gap-4 mb-4 text-sm">
-                <div className="text-center">
-                  <div className="flex items-center justify-center text-gray-500 dark:text-gray-400 mb-1">
-                    <PlayIcon className="w-4 h-4 mr-1" />
-                  </div>
-                  <span className="font-medium text-gray-900 dark:text-white">
-                    {podcast.plays_count.toLocaleString()}
-                  </span>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">Plays</div>
-                </div>
-                <div className="text-center">
-                  <div className="flex items-center justify-center text-gray-500 dark:text-gray-400 mb-1">
-                    <HeartIcon className="w-4 h-4 mr-1" />
-                  </div>
-                  <span className="font-medium text-gray-900 dark:text-white">
-                    {podcast.likes_count}
-                  </span>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">Likes</div>
-                </div>
-                <div className="text-center">
-                  <div className="flex items-center justify-center text-gray-500 dark:text-gray-400 mb-1">
-                    <CalendarIcon className="w-4 h-4 mr-1" />
-                  </div>
-                  <span className="font-medium text-gray-900 dark:text-white">
-                    {new Date(podcast.published_at).toLocaleDateString()}
-                  </span>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">Published</div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+              
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-700">
                 <div className="flex items-center gap-2">
-                  <button className="p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                    <EyeIcon className="w-4 h-4" />
-                  </button>
-                  <button className="p-2 text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors">
-                    <PencilIcon className="w-4 h-4" />
-                  </button>
-                  <button className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors">
-                    <TrashIcon className="w-4 h-4" />
+                  <button
+                    onClick={() => toggleLike(podcast.podcast_id)}
+                    className={`p-1.5 rounded-full transition-colors ${
+                      likedPodcasts.has(podcast.podcast_id)
+                        ? 'text-red-600 hover:text-red-700'
+                        : 'text-gray-400 hover:text-red-600'
+                    }`}
+                  >
+                    {likedPodcasts.has(podcast.podcast_id) ? (
+                      <HeartSolidIcon className="w-4 h-4" />
+                    ) : (
+                      <HeartIcon className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
                 
-                {podcast.status === 'published' && (
-                  <div className="flex items-center text-xs text-green-600 dark:text-green-400">
-                    <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-                    Live
-                  </div>
-                )}
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => openEditModal(podcast)}
+                    className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors rounded-full"
+                  >
+                    <PencilIcon className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDeletePodcast(podcast.podcast_id)}
+                    className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors rounded-full"
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         ))}
       </div>
 
+      {/* Empty State */}
       {filteredPodcasts.length === 0 && (
         <div className="text-center py-12">
           <MicrophoneIcon className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No podcasts found</h3>
+          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No videos found</h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {searchTerm || filterStatus !== 'all' || filterCategory !== 'all'
+            {searchTerm || filterStatus !== 'all'
               ? 'Try adjusting your search or filters.'
-              : 'Get started by uploading your first podcast episode.'}
+              : 'Get started by uploading your first video.'}
           </p>
         </div>
       )}
 
-      {/* Add Podcast Modal */}
+      {/* Add Video Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Create New Podcast</h2>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Upload New Video</h2>
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  resetForm();
+                }}
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <XMarkIcon className="w-6 h-6" />
@@ -462,15 +543,15 @@ const Podcasts: React.FC = () => {
               {/* Title */}
               <div>
                 <label htmlFor="title" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Podcast Title *
+                  Video Title *
                 </label>
                 <input
                   id="title"
                   type="text"
-                  value={newPodcast.title}
-                  onChange={(e) => setNewPodcast(prev => ({ ...prev, title: e.target.value }))}
-                  className="input"
-                  placeholder="Enter podcast title"
+                  value={podcastForm.title}
+                  onChange={(e) => setPodcastForm(prev => ({ ...prev, title: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter video title"
                   required
                 />
               </div>
@@ -483,24 +564,24 @@ const Podcasts: React.FC = () => {
                 <textarea
                   id="description"
                   rows={4}
-                  value={newPodcast.description}
-                  onChange={(e) => setNewPodcast(prev => ({ ...prev, description: e.target.value }))}
-                  className="input"
-                  placeholder="Enter podcast description"
+                  value={podcastForm.description}
+                  onChange={(e) => setPodcastForm(prev => ({ ...prev, description: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter video description"
                 />
               </div>
 
               {/* Video Upload */}
               <div>
                 <label htmlFor="video" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Podcast Video *
+                  Video File *
                 </label>
                 <input
                   id="video"
                   type="file"
                   accept="video/*"
                   onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
-                  className="input"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                 />
                 {uploadProgress.video > 0 && uploadProgress.video < 100 && (
@@ -511,36 +592,23 @@ const Podcasts: React.FC = () => {
                         style={{ width: `${uploadProgress.video}%` }}
                       ></div>
                     </div>
-                    <p className="text-sm text-gray-600 mt-1">Uploading video...</p>
+                    <p className="text-sm text-gray-600 mt-1">Uploading video... {uploadProgress.video}%</p>
                   </div>
                 )}
-                <p className="text-xs text-gray-500 mt-1">Max file size: 500MB. Supported formats: MP4, MOV, AVI, MKV, WebM</p>
               </div>
 
               {/* Thumbnail Upload */}
               <div>
                 <label htmlFor="thumbnail" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Podcast Thumbnail
+                  Thumbnail
                 </label>
                 <input
                   id="thumbnail"
                   type="file"
                   accept="image/*"
                   onChange={(e) => setThumbnailFile(e.target.files?.[0] || null)}
-                  className="input"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
-                {uploadProgress.thumbnail > 0 && uploadProgress.thumbnail < 100 && (
-                  <div className="mt-2">
-                    <div className="bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${uploadProgress.thumbnail}%` }}
-                      ></div>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-1">Uploading thumbnail...</p>
-                  </div>
-                )}
-                <p className="text-xs text-gray-500 mt-1">Max file size: 10MB. Supported formats: JPG, PNG</p>
               </div>
 
               {/* Status */}
@@ -550,9 +618,9 @@ const Podcasts: React.FC = () => {
                 </label>
                 <select
                   id="status"
-                  value={newPodcast.status}
-                  onChange={(e) => setNewPodcast(prev => ({ ...prev, status: e.target.value as any }))}
-                  className="input"
+                  value={podcastForm.status}
+                  onChange={(e) => setPodcastForm(prev => ({ ...prev, status: e.target.value as any }))}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="draft">Draft</option>
                   <option value="published">Published</option>
@@ -564,7 +632,10 @@ const Podcasts: React.FC = () => {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => {
+                    setShowAddModal(false);
+                    resetForm();
+                  }}
                   disabled={isUploading}
                 >
                   Cancel
@@ -577,15 +648,113 @@ const Podcasts: React.FC = () => {
                   {isUploading ? (
                     <div className="flex items-center gap-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      <span>
-                        {uploadProgress.video > 0 ? `${Math.round(uploadProgress.video)}%` : 'Uploading...'}
-                      </span>
+                      <span>Uploading...</span>
                     </div>
                   ) : isCreating ? (
                     'Creating...'
                   ) : (
-                    'Create Podcast'
+                    'Upload Video'
                   )}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Video Modal */}
+      {showEditModal && editingPodcast && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Edit Video</h2>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingPodcast(null);
+                  resetForm();
+                }}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdatePodcast} className="p-6 space-y-6">
+              {error && (
+                <div className="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded-lg p-4">
+                  <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                </div>
+              )}
+
+              {/* Title */}
+              <div>
+                <label htmlFor="edit-title" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Video Title *
+                </label>
+                <input
+                  id="edit-title"
+                  type="text"
+                  value={podcastForm.title}
+                  onChange={(e) => setPodcastForm(prev => ({ ...prev, title: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter video title"
+                  required
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label htmlFor="edit-description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Description
+                </label>
+                <textarea
+                  id="edit-description"
+                  rows={4}
+                  value={podcastForm.description}
+                  onChange={(e) => setPodcastForm(prev => ({ ...prev, description: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter video description"
+                />
+              </div>
+
+              {/* Status */}
+              <div>
+                <label htmlFor="edit-status" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Status
+                </label>
+                <select
+                  id="edit-status"
+                  value={podcastForm.status}
+                  onChange={(e) => setPodcastForm(prev => ({ ...prev, status: e.target.value as any }))}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="draft">Draft</option>
+                  <option value="published">Published</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </div>
+
+              {/* Submit Button */}
+              <div className="flex items-center justify-end gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingPodcast(null);
+                    resetForm();
+                  }}
+                  disabled={isUpdating}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isUpdating}
+                  className={`${isUpdating ? 'opacity-50 cursor-not-allowed' : ''} min-w-[120px]`}
+                >
+                  {isUpdating ? 'Updating...' : 'Update Video'}
                 </Button>
               </div>
             </form>
@@ -596,5 +765,5 @@ const Podcasts: React.FC = () => {
   );
 };
 
-export default Podcasts;
 
+export default Podcasts;

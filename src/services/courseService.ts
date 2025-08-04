@@ -16,19 +16,18 @@ export interface Course {
   categories?: {
     name: string;
     slug: string;
+    description?: string;
   };
 }
-
 export interface CreateCourseData {
+  categoryId: string | number | readonly string[] | undefined;
   title: string;
   description?: string;
-  thumbnailUrl?: string;
-  introVideoUrl?: string;
   price?: number;
-  categoryId?: string;
-  durationHours?: number;
+  category_id?: string; // Use category_id instead of categoryId
+  duration_hours?: number;
   level?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
-  isPublished?: boolean;
+  is_published?: boolean;
 }
 
 export interface Category {
@@ -39,51 +38,19 @@ export interface Category {
   is_active: boolean;
 }
 
-// Upload functions
-export const uploadImage = async (file: File): Promise<{ url: string; publicId: string }> => {
-  const formData = new FormData();
-  formData.append('image', file);
-  
-  const response = await api.post('/uploads/image', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
-  
-  return response.data.data;
-};
-
-export const uploadVideo = async (file: File): Promise<{ url: string; publicId: string }> => {
-  const formData = new FormData();
-  formData.append('video', file);
-  
-  const response = await api.post('/uploads/video', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
-  
-  return response.data.data;
-};
-
-export const createCourse = async (courseData: CreateCourseData): Promise<Course> => {
-  const response = await api.post('/courses', courseData);
-  return response.data.data;
-};
-
-export const getCategories = async (): Promise<Category[]> => {
-  const response = await api.get('/courses/categories');
-  return response.data.data;
-};
-
-export interface UpdateCourseData extends Partial<CreateCourseData> {
-  course_id: string;
+export interface UploadResponse {
+  url: string;
+  publicId: string;
+  originalName: string;
+  size: number;
+  mimetype: string;
 }
 
 class CourseService {
-  async getAllCourses(): Promise<Course[]> {
+  async getAllCourses(isPublished?: boolean): Promise<Course[]> {
     try {
-      const response = await api.get('/courses');
+      const params = isPublished !== undefined ? { isPublished: isPublished.toString() } : {};
+      const response = await api.get('/courses', { params });
       return response.data.data || [];
     } catch (error) {
       console.error('Error fetching courses:', error);
@@ -101,19 +68,66 @@ class CourseService {
     }
   }
 
-  async createCourse(courseData: CreateCourseData): Promise<Course | null> {
+  async createCourse(
+    courseData: CreateCourseData, 
+    thumbnailFile?: File | null, 
+    introVideoFile?: File | null
+  ): Promise<Course | null> {
     try {
-      const response = await api.post('/courses', courseData);
+      const formData = new FormData();
+      
+      // Add course data
+      formData.append('title', courseData.title);
+      if (courseData.description) formData.append('description', courseData.description);
+      if (courseData.price !== undefined) formData.append('price', courseData.price.toString());
+      if (courseData.category_id) formData.append('category_id', courseData.category_id);
+      if (courseData.duration_hours !== undefined) formData.append('duration_hours', courseData.duration_hours.toString());
+      if (courseData.level) formData.append('level', courseData.level);
+      if (courseData.is_published !== undefined) formData.append('is_published', courseData.is_published.toString());
+      
+      // Add files
+      if (thumbnailFile) formData.append('thumbnail', thumbnailFile);
+      if (introVideoFile) formData.append('intro_video', introVideoFile);
+
+      const response = await api.post('/courses', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
       return response.data.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating course:', error);
-      return null;
+      throw new Error(error.response?.data?.error?.message || 'Failed to create course');
     }
   }
 
-  async updateCourse(courseData: UpdateCourseData): Promise<Course | null> {
+  async updateCourse(
+    courseId: string,
+    courseData: Partial<CreateCourseData>,
+    thumbnailFile?: File | null,
+    introVideoFile?: File | null
+  ): Promise<Course | null> {
     try {
-      const response = await api.put(`/courses/${courseData.course_id}`, courseData);
+      const formData = new FormData();
+      
+      // Add course data
+      if (courseData.title) formData.append('title', courseData.title);
+      if (courseData.description) formData.append('description', courseData.description);
+      if (courseData.price !== undefined) formData.append('price', courseData.price.toString());
+      if (courseData.category_id) formData.append('category_id', courseData.category_id);
+      if (courseData.duration_hours !== undefined) formData.append('duration_hours', courseData.duration_hours.toString());
+      if (courseData.level) formData.append('level', courseData.level);
+      if (courseData.is_published !== undefined) formData.append('is_published', courseData.is_published.toString());
+      
+      // Add files
+      if (thumbnailFile) formData.append('thumbnail', thumbnailFile);
+      if (introVideoFile) formData.append('intro_video', introVideoFile);
+
+      const response = await api.put(`/courses/${courseId}`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
       return response.data.data;
     } catch (error) {
       console.error('Error updating course:', error);
@@ -128,6 +142,80 @@ class CourseService {
     } catch (error) {
       console.error('Error deleting course:', error);
       return false;
+    }
+  }
+
+  async getCategories(): Promise<Category[]> {
+    try {
+      const response = await api.get('/courses/categories');
+      return response.data.data || [];
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      return [];
+    }
+  }
+
+  async createCategory(categoryData: {
+    name: string;
+    description?: string;
+    slug: string;
+    isActive?: boolean;
+  }): Promise<Category | null> {
+    try {
+      const response = await api.post('/courses/categories', categoryData);
+      return response.data.data;
+    } catch (error) {
+      console.error('Error creating category:', error);
+      return null;
+    }
+  }
+
+  // Legacy upload methods for backward compatibility
+  async uploadImage(file: File, onProgress?: (progress: number) => void): Promise<UploadResponse> {
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      
+      const response = await api.post('/uploads/image', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          if (onProgress && progressEvent.total) {
+            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            onProgress(progress);
+          }
+        },
+      });
+      
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Error uploading image:', error);
+      throw new Error(error.response?.data?.error?.message || 'Failed to upload image');
+    }
+  }
+
+  async uploadVideo(file: File, onProgress?: (progress: number) => void): Promise<UploadResponse> {
+    try {
+      const formData = new FormData();
+      formData.append('video', file);
+      
+      const response = await api.post('/uploads/video', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          if (onProgress && progressEvent.total) {
+            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            onProgress(progress);
+          }
+        },
+      });
+      
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Error uploading video:', error);
+      throw new Error(error.response?.data?.error?.message || 'Failed to upload video');
     }
   }
 
@@ -149,19 +237,6 @@ class CourseService {
         revenue: 0
       };
     }
-  }
-
-  // Upload methods
-  async uploadImage(file: File): Promise<{ url: string; publicId: string }> {
-    return uploadImage(file);
-  }
-
-  async uploadVideo(file: File): Promise<{ url: string; publicId: string }> {
-    return uploadVideo(file);
-  }
-
-  async getCategories(): Promise<Category[]> {
-    return getCategories();
   }
 }
 

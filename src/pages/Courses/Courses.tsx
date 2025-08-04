@@ -24,6 +24,11 @@ const Courses: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterLevel, setFilterLevel] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const [editedCourse, setEditedCourse] = useState<Course | null>(null);
+  const [showVideo, setShowVideo] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
 
@@ -39,19 +44,18 @@ const Courses: React.FC = () => {
     title: '',
     description: '',
     price: 0,
-    durationHours: 0,
+    duration_hours: 0,
     level: 'BEGINNER',
-    isPublished: false,
-    categoryId: '',
-    thumbnailUrl: '',
-    introVideoUrl: ''
+    is_published: false,
+    categoryId: '' // Changed from category_id to categoryId to match CreateCourseData type
   });
 
   // Fetch courses from API
   const fetchCourses = async () => {
     try {
       setLoading(true);
-      const coursesData = await courseService.getAllCourses();
+      // Add query parameter to get all courses (published and unpublished)
+      const coursesData = await courseService.getAllCourses(false); // false = get all courses
       setCourses(coursesData);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch courses');
@@ -75,18 +79,63 @@ const Courses: React.FC = () => {
     fetchCategories();
   }, []);
 
+  const handleViewCourse = (course: Course) => {
+    setSelectedCourse(course);
+    setShowViewModal(true);
+    setShowVideo(false); // Reset video state when opening view modal
+  };
+
+  const handleEditCourse = (course: Course) => {
+    setSelectedCourse(course);
+    setEditedCourse({ ...course }); // Create a copy for editing
+    setShowEditModal(true);
+  };
+
+  const handleUpdateCourse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editedCourse) return;
+
+    try {
+      setLoading(true);
+      setError("");
+      const updatedCourse = await courseService.updateCourse(
+        editedCourse.course_id,
+        {
+          title: editedCourse.title,
+          description: editedCourse.description,
+          price: editedCourse.price,
+          category_id: editedCourse.category_id,
+          duration_hours: editedCourse.duration_hours,
+          level: editedCourse.level,
+          is_published: editedCourse.is_published
+        }
+      );
+      if (updatedCourse) {
+        setCourses(prev => prev.map(course => course.course_id === updatedCourse.course_id ? updatedCourse : course));
+        setShowEditModal(false);
+        setSelectedCourse(null);
+        setEditedCourse(null);
+      } else {
+        setError("Failed to update course.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to update course.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredCourses = courses.filter(course => {
     const matchesSearch = course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         course.description?.toLowerCase().includes(searchTerm.toLowerCase()) || '';
-    const matchesStatus = filterStatus === 'all' || 
-      (filterStatus === 'published' ? course.is_published : !course.is_published);
+                         course.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = filterStatus === 'all' || (filterStatus === 'published' ? course.is_published : !course.is_published);
     const matchesLevel = filterLevel === 'all' || course.level === filterLevel;
     
     return matchesSearch && matchesStatus && matchesLevel;
   });
 
   const handleCreateCourse = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault(); // Prevent default form submission
     
     // Validate required fields
     if (!newCourse.title.trim()) {
@@ -100,36 +149,16 @@ const Courses: React.FC = () => {
     }
 
     setIsCreating(true);
-    setIsUploading(true);
-    setUploadStatus('uploading');
     setError('');
 
     try {
-      let thumbnailUrl = '';
-      let videoUrl = '';
-
-      // Upload thumbnail if selected
-      if (thumbnailFile) {
-        setUploadProgress(prev => ({ ...prev, thumbnail: 0 }));
-        const thumbnailResult = await courseService.uploadImage(thumbnailFile);
-        setUploadProgress(prev => ({ ...prev, thumbnail: 100 }));
-        thumbnailUrl = thumbnailResult.url;
-      }
-
-      // Upload video (required)
-      setUploadProgress(prev => ({ ...prev, video: 0 }));
-      const videoResult = await courseService.uploadVideo(videoFile);
-      setUploadProgress(prev => ({ ...prev, video: 100 }));
-      videoUrl = videoResult.url;
-
-      // Create course with uploaded media URLs
-      const courseData = {
-        ...newCourse,
-        thumbnailUrl,
-        introVideoUrl: videoUrl
-      };
-
-      const createdCourse = await courseService.createCourse(courseData);
+      // Create course with files directly
+      const createdCourse = await courseService.createCourse(
+        newCourse,
+        thumbnailFile,
+        videoFile
+      );
+      
       if (createdCourse) {
         setCourses(prev => [createdCourse, ...prev]);
         setShowAddModal(false);
@@ -137,20 +166,16 @@ const Courses: React.FC = () => {
           title: '',
           description: '',
           price: 0,
-          durationHours: 0,
+          duration_hours: 0,
           level: 'BEGINNER',
-          isPublished: false,
-          categoryId: '',
-          thumbnailUrl: '',
-          introVideoUrl: ''
+          is_published: false,
+          categoryId: '' // Changed from category_id to categoryId to match CreateCourseData type
         });
         setThumbnailFile(null);
         setVideoFile(null);
         setUploadProgress({ thumbnail: 0, video: 0 });
         setUploadStatus('success');
-      } else {
-        setError('Failed to create course');
-        setUploadStatus('error');
+        await fetchCourses();
       }
     } catch (err: any) {
       setError(err.message || 'Failed to create course');
@@ -158,7 +183,6 @@ const Courses: React.FC = () => {
     } finally {
       setIsCreating(false);
       setIsUploading(false);
-      setTimeout(() => setUploadStatus('idle'), 2000);
     }
   };
 
@@ -369,6 +393,7 @@ const Courses: React.FC = () => {
                     {course.duration_hours}h
                   </span>
                 </div>
+
                 <div>
                   <span className="text-gray-500 dark:text-gray-400">Category:</span>
                   <span className="ml-1 font-medium text-gray-900 dark:text-white">
@@ -382,10 +407,16 @@ const Courses: React.FC = () => {
                   Created {new Date(course.created_at).toLocaleDateString()}
                 </span>
                 <div className="flex items-center gap-2">
-                  <button className="p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                  <button 
+                    onClick={() => handleViewCourse(course)}
+                    className="p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                  >
                     <EyeIcon className="w-4 h-4" />
                   </button>
-                  <button className="p-2 text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors">
+                  <button 
+                    onClick={() => handleEditCourse(course)}
+                    className="p-2 text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors"
+                  >
                     <PencilIcon className="w-4 h-4" />
                   </button>
                   <button 
@@ -431,212 +462,322 @@ const Courses: React.FC = () => {
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Add New Course</h2>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               >
-                <XMarkIcon className="w-5 h-5" />
+                <XMarkIcon className="w-6 h-6" />
               </button>
             </div>
-
-            <form onSubmit={handleCreateCourse} className="p-6 space-y-6">
-              {/* Title */}
+            <form onSubmit={handleCreateCourse} className="p-6 space-y-4">
               <div>
-                <label htmlFor="title" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Course Title *
-                </label>
+                <label htmlFor="title" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Title</label>
                 <input
-                  id="title"
                   type="text"
+                  id="title"
+                  className="mt-1 block w-full input"
                   value={newCourse.title}
-                  onChange={(e) => setNewCourse(prev => ({ ...prev, title: e.target.value }))}
-                  className="input"
-                  placeholder="Enter course title"
+                  onChange={(e) => setNewCourse({ ...newCourse, title: e.target.value })}
                   required
                 />
               </div>
-
-              {/* Description */}
               <div>
-                <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Description
-                </label>
+                <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
                 <textarea
                   id="description"
+                  rows={3}
+                  className="mt-1 block w-full input"
                   value={newCourse.description}
-                  onChange={(e) => setNewCourse(prev => ({ ...prev, description: e.target.value }))}
-                  className="input min-h-[100px] resize-y"
-                  placeholder="Enter course description"
-                />
+                  onChange={(e) => setNewCourse({ ...newCourse, description: e.target.value })}
+                  required
+                ></textarea>
               </div>
-
-              {/* Category Selection */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="price" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Price</label>
+                  <input
+                    type="number"
+                    id="price"
+                    className="mt-1 block w-full input"
+                    value={newCourse.price}
+                    onChange={(e) => setNewCourse({ ...newCourse, price: parseFloat(e.target.value) })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="durationHours" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Duration (Hours)</label>
+                  <input
+                    type="number"
+                    id="durationHours"
+                    className="mt-1 block w-full input"
+                    value={newCourse.duration_hours || ''}
+                    onChange={(e) => setNewCourse({ ...newCourse, duration_hours: parseInt(e.target.value) || 0 })}
+                    required
+                  />
+                </div>
+              </div>
               <div>
-                <label htmlFor="category" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Category
-                </label>
+                <label htmlFor="category" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
                 <select
                   id="category"
+                  className="mt-1 block w-full input"
                   value={newCourse.categoryId}
-                  onChange={(e) => setNewCourse(prev => ({ ...prev, categoryId: e.target.value }))}
-                  className="input"
+                  onChange={(e) => setNewCourse({ ...newCourse, categoryId: e.target.value })}
+                  required
                 >
                   <option value="">Select a category</option>
-                  {categories.map((category) => (
-                    <option key={category.category_id} value={category.category_id}>
-                      {category.name}
-                    </option>
+                  {categories.map(category => (
+                    <option key={category.category_id} value={category.category_id}>{category.name}</option>
                   ))}
                 </select>
               </div>
-
-              {/* Price and Duration */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="price" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Price ($) *
-                  </label>
-                  <input
-                    id="price"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={newCourse.price}
-                    onChange={(e) => setNewCourse(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
-                    className="input"
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="durationHours" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Duration (hours) *
-                  </label>
-                  <input
-                    id="durationHours"
-                    type="number"
-                    min="0"
-                    value={newCourse.durationHours}
-                    onChange={(e) => setNewCourse(prev => ({ ...prev, durationHours: parseInt(e.target.value) || 0 }))}
-                    className="input"
-                    placeholder="0"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Level and Instructor */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="level" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Level *
-                  </label>
-                  <select
-                    id="level"
-                    value={newCourse.level}
-                    onChange={(e) => setNewCourse(prev => ({ ...prev, level: e.target.value as any }))}
-                    className="input"
-                    required
-                  >
-                    <option value="BEGINNER">Beginner</option>
-                    <option value="INTERMEDIATE">Intermediate</option>
-                    <option value="ADVANCED">Advanced</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Thumbnail Upload */}
               <div>
-                <label htmlFor="thumbnail" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Course Thumbnail
-                </label>
+                <label htmlFor="level" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Level</label>
+                <select
+                  id="level"
+                  className="mt-1 block w-full input"
+                  value={newCourse.level}
+                  onChange={(e) => setNewCourse({ ...newCourse, level: e.target.value as 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' })}
+                  required
+                >
+                  <option value="BEGINNER">Beginner</option>
+                  <option value="INTERMEDIATE">Intermediate</option>
+                  <option value="ADVANCED">Advanced</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="thumbnail" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Thumbnail</label>
                 <input
+                  type="file"
                   id="thumbnail"
-                  type="file"
+                  className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                   accept="image/*"
-                  onChange={(e) => setThumbnailFile(e.target.files?.[0] || null)}
-                  className="input"
+                  onChange={(e) => setThumbnailFile(e.target.files ? e.target.files[0] : null)}
                 />
-                {uploadProgress.thumbnail > 0 && uploadProgress.thumbnail < 100 && (
-                  <div className="mt-2">
-                    <div className="bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${uploadProgress.thumbnail}%` }}
-                      ></div>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-1">Uploading thumbnail...</p>
-                  </div>
-                )}
               </div>
-
-              {/* Video Upload */}
               <div>
-                <label htmlFor="video" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Course Intro Video *
-                </label>
+                <label htmlFor="video" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Intro Video</label>
                 <input
-                  id="video"
                   type="file"
+                  id="video"
+                  className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                   accept="video/*"
-                  onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
-                  className="input"
+                  onChange={(e) => setVideoFile(e.target.files ? e.target.files[0] : null)}
                   required
                 />
-                {uploadProgress.video > 0 && uploadProgress.video < 100 && (
-                  <div className="mt-2">
-                    <div className="bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${uploadProgress.video}%` }}
-                      ></div>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-1">Uploading video...</p>
-                  </div>
-                )}
-                <p className="text-xs text-gray-500 mt-1">Max file size: 500MB. Supported formats: MP4, MOV, AVI, MKV, WebM</p>
               </div>
-
-              {/* Published Status */}
+              
               <div className="flex items-center">
                 <input
                   type="checkbox"
-                  id="isPublished"
-                  checked={newCourse.isPublished}
-                  onChange={(e) => setNewCourse(prev => ({ ...prev, isPublished: e.target.checked }))}
-                  className="mr-2"
+                  id="published"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  checked={newCourse.is_published}
+                  onChange={(e) => setNewCourse({ ...newCourse, is_published: e.target.checked })}
                 />
-                <label htmlFor="isPublished" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Publish course immediately
-                </label>
+                <label htmlFor="published" className="ml-2 block text-sm text-gray-900 dark:text-gray-300">Published</label>
               </div>
-
-              {/* Submit Button */}
-              <div className="flex items-center justify-end gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowAddModal(false)}
-                  disabled={isUploading}
-                >
+              
+              {isUploading && (
+                <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                  <div
+                    className="bg-blue-600 h-2.5 rounded-full"
+                    style={{ width: `${(uploadProgress.thumbnail + uploadProgress.video) / 2}%` }}
+                  ></div>
+                </div>
+              )}
+              {uploadStatus === 'success' && <p className="text-green-500 text-sm">Upload successful!</p>}
+              {uploadStatus === 'error' && <p className="text-red-500 text-sm">Upload failed. Please try again.</p>}
+              <div className="flex justify-end space-x-2">
+                <Button type="button" variant="secondary" onClick={() => setShowAddModal(false)}>
                   Cancel
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={isCreating || isUploading || !videoFile}
-                  className={`${isCreating || isUploading || !videoFile ? 'opacity-50 cursor-not-allowed' : ''} min-w-[140px]`}
-                >
-                                   {isUploading ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      <span>
-                        {uploadProgress.video > 0 ? `${Math.round(uploadProgress.video)}%` : 'Uploading...'}
-                      </span>
+                <Button type="submit" disabled={isCreating || isUploading}>
+                  {isCreating ? <LoadingSpinner size="sm" /> : 'Add Course'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* View Course Modal */}
+      {showViewModal && selectedCourse && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-in">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Course Details</h2>
+              <button
+                onClick={() => setShowViewModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{selectedCourse.title}</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{selectedCourse.description}</p>
+              </div>
+              {selectedCourse.intro_video_url && (
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden relative" style={{ paddingTop: '56.25%' }}> {/* 16:9 Aspect Ratio */}
+                  {!showVideo ? (
+                    <div 
+                      className="absolute inset-0 flex items-center justify-center cursor-pointer bg-black bg-opacity-75"
+                      onClick={() => setShowVideo(true)}
+                    >
+                      {selectedCourse.thumbnail_url && (
+                        <img 
+                          src={selectedCourse.thumbnail_url} 
+                          alt="Video Thumbnail" 
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
+                      )}
+                      <div className="absolute flex items-center justify-center w-16 h-16 rounded-full bg-red-600 bg-opacity-80">
+                        <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </div>
                     </div>
-                  ) : isCreating ? (
-                    'Creating...'
                   ) : (
-                    'Create Course'
+                    <video controls autoPlay src={selectedCourse.intro_video_url} className="absolute inset-0 w-full h-full object-cover"></video>
                   )}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">Price:</span>
+                  <span className="ml-1 font-medium text-gray-900 dark:text-white">${selectedCourse.price}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">Duration:</span>
+                  <span className="ml-1 font-medium text-gray-900 dark:text-white">{selectedCourse.duration_hours}h</span>
+                </div>
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">Level:</span>
+                  <span className="ml-1 font-medium text-gray-900 dark:text-white">{selectedCourse.level}</span>
+                </div>
+                
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">Category:</span>
+                  <span className="ml-1 font-medium text-gray-900 dark:text-white">{selectedCourse.categories?.name || 'N/A'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">Published:</span>
+                  <span className="ml-1 font-medium text-gray-900 dark:text-white">{selectedCourse.is_published ? 'Yes' : 'No'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">Created At:</span>
+                  <span className="ml-1 font-medium text-gray-900 dark:text-white">{new Date(selectedCourse.created_at).toLocaleDateString()}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Course Modal */}
+      {showEditModal && editedCourse && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-in">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Edit Course</h2>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={handleUpdateCourse} className="p-6 space-y-4">
+              <div>
+                <label htmlFor="edit-title" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Title</label>
+                <input
+                  type="text"
+                  id="edit-title"
+                  className="mt-1 block w-full input"
+                  value={editedCourse.title}
+                  onChange={(e) => setEditedCourse({ ...editedCourse, title: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="edit-description" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                <textarea
+                  id="edit-description"
+                  rows={3}
+                  className="mt-1 block w-full input"
+                  value={editedCourse.description || ''}
+                  onChange={(e) => setEditedCourse({ ...editedCourse, description: e.target.value })}
+                ></textarea>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="edit-price" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Price</label>
+                  <input
+                    type="number"
+                    id="edit-price"
+                    className="mt-1 block w-full input"
+                    value={editedCourse.price}
+                    onChange={(e) => setEditedCourse({ ...editedCourse, price: parseFloat(e.target.value) })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="edit-duration" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Duration (Hours)</label>
+                  <input
+                    type="number"
+                    id="edit-duration"
+                    className="mt-1 block w-full input"
+                    value={editedCourse.duration_hours}
+                    onChange={(e) => setEditedCourse({ ...editedCourse, duration_hours: parseInt(e.target.value) })}
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <label htmlFor="edit-category" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
+                <select
+                  id="edit-category"
+                  className="mt-1 block w-full input"
+                  value={editedCourse.category_id || ''}
+                  onChange={(e) => setEditedCourse({ ...editedCourse, category_id: e.target.value })}
+                >
+                  <option value="">Select a category</option>
+                  {categories.map(category => (
+                    <option key={category.category_id} value={category.category_id}>{category.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="edit-level" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Level</label>
+                <select
+                  id="edit-level"
+                  className="mt-1 block w-full input"
+                  value={editedCourse.level}
+                  onChange={(e) => setEditedCourse({ ...editedCourse, level: e.target.value as 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' })}
+                  required
+                >
+                  <option value="BEGINNER">Beginner</option>
+                  <option value="INTERMEDIATE">Intermediate</option>
+                  <option value="ADVANCED">Advanced</option>
+                </select>
+              </div>
+              
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="edit-published"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  checked={editedCourse.is_published}
+                  onChange={(e) => setEditedCourse({ ...editedCourse, is_published: e.target.checked })}
+                />
+                <label htmlFor="edit-published" className="ml-2 block text-sm text-gray-900 dark:text-gray-300">Published</label>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button type="button" variant="secondary" onClick={() => setShowEditModal(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={loading}>
+                  {loading ? <LoadingSpinner size="sm" /> : 'Save Changes'}
                 </Button>
               </div>
             </form>
