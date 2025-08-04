@@ -18,7 +18,8 @@ import {
   ArrowRightOnRectangleIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  UserIcon
 } from '@heroicons/react/24/outline';
 
 interface NavItem {
@@ -63,6 +64,11 @@ const navItems: NavItem[] = [
     name: 'Podcasts',
     path: '/podcasts',
     icon: MicrophoneIcon
+  },
+  {
+    name: 'Instructors',
+    path: '/instructors',
+    icon: UserIcon
   }
 ];
 

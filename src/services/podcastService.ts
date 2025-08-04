@@ -8,8 +8,9 @@ export interface Podcast {
   video_url: string;
   thumbnail_url?: string;
   duration?: number; // in seconds
-  status: 'draft' | 'published' | 'archived';
+  status: 'draft' | 'scheduled' | 'published' | 'archived';
   published_at?: string;
+  scheduled_at?: string;
   created_at: string;
   updated_at: string;
   // Keep only the basic fields that the backend actually provides
@@ -20,7 +21,8 @@ export interface Podcast {
 export interface CreatePodcastData {
   title: string;
   description?: string;
-  status?: 'draft' | 'published';
+  status?: 'draft' | 'published' | 'scheduled';
+  scheduled_at?: string;
 }
 
 export interface UploadResponse {
@@ -67,10 +69,13 @@ class PodcastService {
     onProgress?: (progress: UploadProgress) => void
   ): Promise<Podcast> {
     try {
+      console.log('📝 Podcast service input:', podcastData);
+      
       const formData = new FormData();
       formData.append('title', podcastData.title);
       if (podcastData.description) formData.append('description', podcastData.description);
       formData.append('status', podcastData.status || 'draft');
+      if (podcastData.scheduled_at) formData.append('scheduled_at', podcastData.scheduled_at);
       formData.append('video', videoFile);
       
       if (thumbnailFile) {
@@ -122,6 +127,7 @@ class PodcastService {
       if (podcastData.title) formData.append('title', podcastData.title);
       if (podcastData.description) formData.append('description', podcastData.description);
       if (podcastData.status) formData.append('status', podcastData.status);
+      if (podcastData.scheduled_at) formData.append('scheduled_at', podcastData.scheduled_at);
       if (videoFile) formData.append('video', videoFile);
       if (thumbnailFile) formData.append('thumbnail', thumbnailFile);
 

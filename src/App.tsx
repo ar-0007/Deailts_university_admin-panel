@@ -11,6 +11,7 @@ import Enrollments from './pages/Enrollments';
 import Mentorship from './pages/Mentorship';
 import Assignments from './pages/Assignments';
 import Podcasts from './pages/Podcasts';
+import Instructors from './pages/Instructors';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -127,6 +128,14 @@ const App: React.FC = () => {
                 element={
                   <ProtectedRoute>
                     <Podcasts />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/instructors" 
+                element={
+                  <ProtectedRoute>
+                    <Instructors />
                   </ProtectedRoute>
                 } 
               />

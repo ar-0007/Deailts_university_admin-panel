@@ -8,9 +8,12 @@ export interface Course {
   intro_video_url?: string;
   price: number;
   category_id?: string;
+  instructor_id?: string;
   duration_hours: number;
   level: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
   is_published: boolean;
+  video_series?: string;
+  video_part?: number;
   created_at: string;
   updated_at: string;
   categories?: {
@@ -18,16 +21,28 @@ export interface Course {
     slug: string;
     description?: string;
   };
+  instructor?: {
+    instructor_id: string;
+    first_name: string;
+    last_name: string;
+    email: string;
+    bio?: string;
+    specialties: string[];
+    experience_years: number;
+    profile_image_url?: string;
+  };
 }
 export interface CreateCourseData {
-  categoryId: string | number | readonly string[] | undefined;
   title: string;
   description?: string;
   price?: number;
-  category_id?: string; // Use category_id instead of categoryId
+  category_id?: string;
+  instructor_id?: string;
   duration_hours?: number;
   level?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
   is_published?: boolean;
+  video_series?: string;
+  video_part?: number;
 }
 
 export interface Category {
@@ -81,9 +96,12 @@ class CourseService {
       if (courseData.description) formData.append('description', courseData.description);
       if (courseData.price !== undefined) formData.append('price', courseData.price.toString());
       if (courseData.category_id) formData.append('category_id', courseData.category_id);
+      if (courseData.instructor_id) formData.append('instructor_id', courseData.instructor_id);
       if (courseData.duration_hours !== undefined) formData.append('duration_hours', courseData.duration_hours.toString());
       if (courseData.level) formData.append('level', courseData.level);
       if (courseData.is_published !== undefined) formData.append('is_published', courseData.is_published.toString());
+      if (courseData.video_series) formData.append('video_series', courseData.video_series);
+      if (courseData.video_part !== undefined) formData.append('video_part', courseData.video_part.toString());
       
       // Add files
       if (thumbnailFile) formData.append('thumbnail', thumbnailFile);
@@ -167,6 +185,26 @@ class CourseService {
     } catch (error) {
       console.error('Error creating category:', error);
       return null;
+    }
+  }
+
+  async deleteCategory(categoryId: string): Promise<boolean> {
+    try {
+      const response = await api.delete(`/courses/categories/${categoryId}`);
+      return response.data.success;
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      return false;
+    }
+  }
+
+  async getExistingVideoSeries(): Promise<string[]> {
+    try {
+      const response = await api.get('/courses/video-series');
+      return response.data.data || [];
+    } catch (error) {
+      console.error('Error fetching video series:', error);
+      return [];
     }
   }
 

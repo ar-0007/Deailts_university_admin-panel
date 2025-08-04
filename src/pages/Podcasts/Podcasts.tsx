@@ -41,7 +41,8 @@ const Podcasts: React.FC = () => {
   const [podcastForm, setPodcastForm] = useState<CreatePodcastData>({
     title: '',
     description: '',
-    status: 'draft'
+    status: 'draft',
+    scheduled_at: ''
   });
 
   // Fetch podcasts from API
@@ -129,6 +130,10 @@ const Podcasts: React.FC = () => {
     setError('');
 
     try {
+      console.log('📝 Frontend form data:', podcastForm);
+      console.log('📝 Video file:', videoFile);
+      console.log('📝 Thumbnail file:', thumbnailFile);
+      
       const createdPodcast = await podcastService.createPodcast(
         podcastForm,
         videoFile,
@@ -196,7 +201,8 @@ const Podcasts: React.FC = () => {
     setPodcastForm({
       title: podcast.title,
       description: podcast.description || '',
-      status: podcast.status === 'archived' ? 'draft' : podcast.status
+      status: podcast.status === 'archived' ? 'draft' : podcast.status,
+      scheduled_at: podcast.scheduled_at || ''
     });
     setShowEditModal(true);
   };
@@ -206,7 +212,8 @@ const Podcasts: React.FC = () => {
     setPodcastForm({
       title: '',
       description: '',
-      status: 'draft'
+      status: 'draft',
+      scheduled_at: ''
     });
     setVideoFile(null);
     setThumbnailFile(null);
@@ -423,12 +430,22 @@ const Podcasts: React.FC = () => {
                   {formatDuration(podcast.duration)}
                 </div>
               )}
+
+              {/* Scheduled Time Badge */}
+              {podcast.status === 'scheduled' && podcast.scheduled_at && (
+                <div className="absolute bottom-2 left-2 bg-blue-600 bg-opacity-90 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+                  <ClockIcon className="w-3 h-3" />
+                  {new Date(podcast.scheduled_at).toLocaleDateString()} {new Date(podcast.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                </div>
+              )}
               
               {/* Status Badge */}
               <div className="absolute top-2 left-2">
                 <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                   podcast.status === 'published' 
                     ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                    : podcast.status === 'scheduled'
+                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
                     : podcast.status === 'draft'
                     ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
                     : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
@@ -623,9 +640,36 @@ const Podcasts: React.FC = () => {
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="draft">Draft</option>
+                  <option value="scheduled">Scheduled</option>
                   <option value="published">Published</option>
                 </select>
               </div>
+
+              {/* Schedule Date/Time - Only show when status is 'scheduled' */}
+              {podcastForm.status === 'scheduled' && (
+                <div>
+                  <label htmlFor="scheduled_at" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Schedule Date & Time *
+                  </label>
+                  <input
+                    id="scheduled_at"
+                    type="datetime-local"
+                    value={podcastForm.scheduled_at}
+                    onChange={(e) => {
+                      // Ensure the datetime format includes seconds
+                      const datetimeValue = e.target.value;
+                      const formattedValue = datetimeValue ? `${datetimeValue}:00` : '';
+                      setPodcastForm(prev => ({ ...prev, scheduled_at: formattedValue }));
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required={podcastForm.status === 'scheduled'}
+                    min={new Date().toISOString().slice(0, 16)}
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    The video will be automatically published at the scheduled time
+                  </p>
+                </div>
+              )}
 
               {/* Submit Button */}
               <div className="flex items-center justify-end gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -730,10 +774,37 @@ const Podcasts: React.FC = () => {
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="draft">Draft</option>
+                  <option value="scheduled">Scheduled</option>
                   <option value="published">Published</option>
                   <option value="archived">Archived</option>
                 </select>
               </div>
+
+              {/* Schedule Date/Time - Only show when status is 'scheduled' */}
+              {podcastForm.status === 'scheduled' && (
+                <div>
+                  <label htmlFor="edit-scheduled_at" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Schedule Date & Time *
+                  </label>
+                  <input
+                    id="edit-scheduled_at"
+                    type="datetime-local"
+                    value={podcastForm.scheduled_at}
+                    onChange={(e) => {
+                      // Ensure the datetime format includes seconds
+                      const datetimeValue = e.target.value;
+                      const formattedValue = datetimeValue ? `${datetimeValue}:00` : '';
+                      setPodcastForm(prev => ({ ...prev, scheduled_at: formattedValue }));
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required={podcastForm.status === 'scheduled'}
+                    min={new Date().toISOString().slice(0, 16)}
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    The video will be automatically published at the scheduled time
+                  </p>
+                </div>
+              )}
 
               {/* Submit Button */}
               <div className="flex items-center justify-end gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
