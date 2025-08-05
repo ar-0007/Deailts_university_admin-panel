@@ -66,7 +66,7 @@ const Dashboard: React.FC = () => {
       status: 'approved',
       requestedAt: '2024-01-15T10:30:00Z',
       approvedAt: '2024-01-15T11:00:00Z',
-      user: { id: '1', name: 'John Doe', email: 'john@example.com', role: 'student', status: 'active', createdAt: '2024-01-01' },
+      user: { id: '1', name: 'Card Holder Name', email: 'john@example.com', role: 'student', status: 'active', createdAt: '2024-01-01' },
       course: { 
         id: '1', 
         title: 'React Fundamentals', 
@@ -133,7 +133,7 @@ const Dashboard: React.FC = () => {
       status: 'confirmed',
       paymentStatus: 'paid',
       zoomLink: 'https://zoom.us/j/123456789',
-      user: { id: '1', name: 'John Doe', email: 'john@example.com', role: 'student', status: 'active', createdAt: '2024-01-01' },
+      user: { id: '1', name: 'Card Holder Name', email: 'john@example.com', role: 'student', status: 'active', createdAt: '2024-01-01' },
       mentor: { id: '10', name: 'Dr. Sarah Wilson', email: 'sarah@example.com', role: 'mentor', status: 'active', createdAt: '2024-01-01' }
     },
     {

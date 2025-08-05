@@ -10,9 +10,13 @@ import {
   XCircleIcon,
   CurrencyDollarIcon,
   StarIcon,
-  XMarkIcon
+  XMarkIcon,
+  UserIcon,
+  EnvelopeIcon,
+  PhoneIcon
 } from '@heroicons/react/24/outline';
 import mentorshipService, { type MentorshipRequest, type MentorshipSlot } from '../../services/mentorshipService';
+import guestBookingService, { type GuestBooking } from '../../services/guestBookingService';
 import Button from '../../components/ui/Button';
 // import Card from '../../components/ui/Card';
 // import LoadingSpinner from '../../components/ui/LoadingSpinner';
@@ -41,9 +45,10 @@ interface MentorshipBooking {
 const Mentorship: React.FC = () => {
   const [requests, setRequests] = useState<MentorshipRequest[]>([]);
   const [bookings, setBookings] = useState<MentorshipBooking[]>([]);
+  const [guestBookings, setGuestBookings] = useState<GuestBooking[]>([]);
   const [slots, setSlots] = useState<MentorshipSlot[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'requests' | 'bookings' | 'slots'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'bookings' | 'guest-bookings' | 'slots'>('requests');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [processingRequest, setProcessingRequest] = useState<string | null>(null);
@@ -96,10 +101,25 @@ const Mentorship: React.FC = () => {
     }
   };
 
+  // Fetch guest bookings from API
+  const fetchGuestBookings = async () => {
+    try {
+      setLoading(true);
+      const guestBookingsData = await guestBookingService.getAllBookings();
+      setGuestBookings(guestBookingsData);
+    } catch (err: any) {
+      console.error('Failed to fetch guest bookings:', err);
+      setError('Failed to load guest bookings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchRequests();
     fetchSlots();
     fetchBookings();
+    fetchGuestBookings();
   }, []);
 
   // Handle mentorship request approval with scheduling
@@ -173,32 +193,111 @@ const Mentorship: React.FC = () => {
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  // Guest booking handlers
+  const handleConfirmGuestBooking = async (bookingId: string) => {
+    try {
+      setProcessingRequest(bookingId);
+      const meetingLink = `https://meet.google.com/${Math.random().toString(36).substring(2, 15)}`;
+      await guestBookingService.updateBookingStatus(bookingId, {
+        bookingStatus: 'CONFIRMED',
+        meetingLink
+      });
+      await fetchGuestBookings();
+      setError('');
+      alert('✅ Guest booking confirmed successfully!\n\n📧 Confirmation emails have been sent to:\n• Customer\n• Instructor\n\n🔗 Meeting link has been generated and included in the emails.');
+    } catch (err: any) {
+      setError(err.message || 'Failed to confirm booking');
+      alert('❌ Failed to confirm booking. Please try again.');
+    } finally {
+      setProcessingRequest(null);
+    }
+  };
+
+  const handleCompleteGuestBooking = async (bookingId: string) => {
+    try {
+      setProcessingRequest(bookingId);
+      await guestBookingService.updateBookingStatus(bookingId, {
+        bookingStatus: 'COMPLETED'
+      });
+      await fetchGuestBookings();
+      setError('');
+      alert('Guest booking marked as completed!');
+    } catch (err: any) {
+      setError(err.message || 'Failed to complete booking');
+      alert('Failed to complete booking. Please try again.');
+    } finally {
+      setProcessingRequest(null);
+    }
+  };
+
+  const handleCancelGuestBooking = async (bookingId: string) => {
+    if (window.confirm('Are you sure you want to cancel this booking?\n\n📧 Cancellation emails will be sent to the customer and instructor.')) {
+      try {
+        setProcessingRequest(bookingId);
+        await guestBookingService.updateBookingStatus(bookingId, {
+          bookingStatus: 'CANCELLED'
+        });
+        await fetchGuestBookings();
+        setError('');
+        alert('✅ Guest booking cancelled successfully!\n\n📧 Cancellation emails have been sent to:\n• Customer (with refund information)\n• Instructor (with schedule update)');
+      } catch (err: any) {
+        setError(err.message || 'Failed to cancel booking');
+        alert('❌ Failed to cancel booking. Please try again.');
+      } finally {
+        setProcessingRequest(null);
+      }
+    }
+  };
+
+  const handleDeleteGuestBooking = async (bookingId: string) => {
+    if (window.confirm('Are you sure you want to delete this booking? This action cannot be undone.')) {
+      try {
+        setProcessingRequest(bookingId);
+        await guestBookingService.deleteBooking(bookingId);
+        await fetchGuestBookings();
+        setError('');
+        alert('Guest booking deleted successfully!');
+      } catch (err: any) {
+        setError(err.message || 'Failed to delete booking');
+        alert('Failed to delete booking. Please try again.');
+      } finally {
+        setProcessingRequest(null);
+      }
+    }
+  };
+
+    const getStatusBadge = (status: string) => {
     const statusStyles = {
-      pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-      approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-      rejected: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-      confirmed: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-      completed: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-      cancelled: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+      pending: 'bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-800 dark:from-amber-900/50 dark:to-yellow-900/50 dark:text-amber-200 border border-amber-200 dark:border-amber-700',
+      approved: 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 dark:from-green-900/50 dark:to-emerald-900/50 dark:text-green-200 border border-green-200 dark:border-green-700',
+      rejected: 'bg-gradient-to-r from-red-100 to-pink-100 text-red-800 dark:from-red-900/50 dark:to-pink-900/50 dark:text-red-200 border border-red-200 dark:border-red-700',
+      confirmed: 'bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 dark:from-blue-900/50 dark:to-indigo-900/50 dark:text-blue-200 border border-blue-200 dark:border-blue-700',
+      completed: 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 dark:from-green-900/50 dark:to-emerald-900/50 dark:text-green-200 border border-green-200 dark:border-green-700',
+      cancelled: 'bg-gradient-to-r from-red-100 to-pink-100 text-red-800 dark:from-red-900/50 dark:to-pink-900/50 dark:text-red-200 border border-red-200 dark:border-red-700'
     };
 
+    // Convert status to lowercase for consistent lookup
+    const statusKey = status.toLowerCase() as keyof typeof statusStyles;
+    const style = statusStyles[statusKey] || 'bg-gradient-to-r from-gray-100 to-slate-100 text-gray-800 dark:from-gray-900/50 dark:to-slate-900/50 dark:text-gray-200 border border-gray-200 dark:border-gray-700';
+
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyles[status as keyof typeof statusStyles]}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+      <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide shadow-sm ${style}`}>
+        {status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()}
       </span>
     );
   };
 
   const getPaymentBadge = (status: string) => {
     const statusStyles = {
-      pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-      paid: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-      refunded: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+      pending: 'bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-800 dark:from-amber-900/50 dark:to-yellow-900/50 dark:text-amber-200 border border-amber-200 dark:border-amber-700',
+      paid: 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 dark:from-green-900/50 dark:to-emerald-900/50 dark:text-green-200 border border-green-200 dark:border-green-700',
+      refunded: 'bg-gradient-to-r from-red-100 to-pink-100 text-red-800 dark:from-red-900/50 dark:to-pink-900/50 dark:text-red-200 border border-red-200 dark:border-red-700',
+      failed: 'bg-gradient-to-r from-red-100 to-pink-100 text-red-800 dark:from-red-900/50 dark:to-pink-900/50 dark:text-red-200 border border-red-200 dark:border-red-700',
+      cancelled: 'bg-gradient-to-r from-gray-100 to-slate-100 text-gray-800 dark:from-gray-900/50 dark:to-slate-900/50 dark:text-gray-200 border border-gray-200 dark:border-gray-700'
     };
 
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyles[status as keyof typeof statusStyles]}`}>
+      <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide shadow-sm ${statusStyles[status.toLowerCase() as keyof typeof statusStyles]}`}>
         {status.charAt(0).toUpperCase() + status.slice(1)}
       </span>
     );
@@ -236,10 +335,17 @@ const Mentorship: React.FC = () => {
       pendingBookings: bookings.filter(b => b.status === 'pending').length,
       confirmedBookings: bookings.filter(b => b.status === 'confirmed').length,
       completedBookings: bookings.filter(b => b.status === 'completed').length,
+      totalGuestBookings: guestBookings.length,
+      pendingGuestBookings: guestBookings.filter(b => b.booking_status === 'PENDING').length,
+      confirmedGuestBookings: guestBookings.filter(b => b.booking_status === 'CONFIRMED').length,
+      completedGuestBookings: guestBookings.filter(b => b.booking_status === 'COMPLETED').length,
       availableSlots: slots.filter(s => s.is_available).length,
       revenue: bookings
         .filter(b => b.payment_status === 'paid')
-        .reduce((sum, b) => sum + b.price, 0)
+        .reduce((sum, b) => sum + b.price, 0) +
+        guestBookings
+          .filter(b => b.payment_status === 'PAID')
+          .reduce((sum, b) => sum + b.session_price, 0)
     };
   };
 
@@ -256,152 +362,152 @@ const Mentorship: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl p-6 border border-blue-100 dark:border-gray-700">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mentorship</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Manage mentorship requests, bookings and available time slots
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent dark:from-blue-400 dark:to-indigo-400">
+            Mentorship Dashboard
+          </h1>
+          <p className="mt-2 text-base text-gray-600 dark:text-gray-300 font-medium">
+            Manage mentorship requests, bookings and available time slots with ease
           </p>
         </div>
-        <button className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
+        <button className="mt-4 sm:mt-0 inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl">
           <PlusIcon className="w-5 h-5 mr-2" />
           Add Time Slot
         </button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/50 dark:to-blue-800/50 rounded-2xl shadow-lg border border-blue-200 dark:border-blue-700 p-6 hover:shadow-xl transition-all duration-200 transform hover:-translate-y-1">
           <div className="flex items-center">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
-              <UserGroupIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg">
+              <UserGroupIcon className="w-7 h-7 text-white" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Requests</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalRequests}</p>
+              <p className="text-sm font-semibold text-blue-600 dark:text-blue-300 uppercase tracking-wide">Requests</p>
+              <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">{stats.totalRequests}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-900/50 dark:to-amber-800/50 rounded-2xl shadow-lg border border-amber-200 dark:border-amber-700 p-6 hover:shadow-xl transition-all duration-200 transform hover:-translate-y-1">
           <div className="flex items-center">
-            <div className="p-2 bg-yellow-100 dark:bg-yellow-900 rounded-lg">
-              <ClockIcon className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+            <div className="p-3 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl shadow-lg">
+              <ClockIcon className="w-7 h-7 text-white" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Pending</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.pendingRequests}</p>
+              <p className="text-sm font-semibold text-amber-600 dark:text-amber-300 uppercase tracking-wide">Pending</p>
+              <p className="text-3xl font-bold text-amber-900 dark:text-amber-100">{stats.pendingRequests}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/50 dark:to-purple-800/50 rounded-2xl shadow-lg border border-purple-200 dark:border-purple-700 p-6 hover:shadow-xl transition-all duration-200 transform hover:-translate-y-1">
           <div className="flex items-center">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
-              <CheckCircleIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <div className="p-3 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg">
+              <UserIcon className="w-7 h-7 text-white" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Bookings</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalBookings}</p>
+              <p className="text-sm font-semibold text-purple-600 dark:text-purple-300 uppercase tracking-wide">Guest Bookings</p>
+              <p className="text-3xl font-bold text-purple-900 dark:text-purple-100">{stats.totalGuestBookings}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/50 dark:to-emerald-800/50 rounded-2xl shadow-lg border border-emerald-200 dark:border-emerald-700 p-6 hover:shadow-xl transition-all duration-200 transform hover:-translate-y-1">
           <div className="flex items-center">
-            <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
-              <StarIcon className="w-6 h-6 text-green-600 dark:text-green-400" />
+            <div className="p-3 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl shadow-lg">
+              <CurrencyDollarIcon className="w-7 h-7 text-white" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Completed</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.completedBookings}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
-              <CalendarIcon className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Available</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.availableSlots}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
-              <CurrencyDollarIcon className="w-6 h-6 text-green-600 dark:text-green-400" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Revenue</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">${stats.revenue.toLocaleString()}</p>
+              <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-300 uppercase tracking-wide">Revenue</p>
+              <p className="text-3xl font-bold text-emerald-900 dark:text-emerald-100">${stats.revenue.toLocaleString()}</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="border-b border-gray-200 dark:border-gray-700">
-          <nav className="flex space-x-8 px-6">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 border-b border-gray-200 dark:border-gray-700">
+          <nav className="flex space-x-1 px-6">
             <button
               onClick={() => setActiveTab('requests')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-6 font-semibold text-sm rounded-t-lg transition-all duration-200 ${
                 activeTab === 'requests'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                  ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-500 shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white/50 dark:hover:bg-gray-800/50'
               }`}
             >
-              Requests ({requests.length})
+              <span className="flex items-center">
+                <UserGroupIcon className="w-4 h-4 mr-2" />
+                Requests ({requests.length})
+              </span>
             </button>
             <button
               onClick={() => setActiveTab('bookings')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-6 font-semibold text-sm rounded-t-lg transition-all duration-200 ${
                 activeTab === 'bookings'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                  ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-500 shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white/50 dark:hover:bg-gray-800/50'
               }`}
             >
-              Bookings ({bookings.length})
+              <span className="flex items-center">
+                <CheckCircleIcon className="w-4 h-4 mr-2" />
+                Bookings ({bookings.length})
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('guest-bookings')}
+              className={`py-4 px-6 font-semibold text-sm rounded-t-lg transition-all duration-200 ${
+                activeTab === 'guest-bookings'
+                  ? 'bg-white dark:bg-gray-800 text-purple-600 dark:text-purple-400 border-b-2 border-purple-500 shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-white/50 dark:hover:bg-gray-800/50'
+              }`}
+            >
+              <span className="flex items-center">
+                <UserIcon className="w-4 h-4 mr-2" />
+                Guest Bookings ({guestBookings.length})
+              </span>
             </button>
             <button
               onClick={() => setActiveTab('slots')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-6 font-semibold text-sm rounded-t-lg transition-all duration-200 ${
                 activeTab === 'slots'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                  ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-500 shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white/50 dark:hover:bg-gray-800/50'
               }`}
             >
-              Available Slots ({slots.length})
+              <span className="flex items-center">
+                <CalendarIcon className="w-4 h-4 mr-2" />
+                Available Slots ({slots.length})
+              </span>
             </button>
           </nav>
         </div>
 
-        <div className="p-6">
+        <div className="p-8">
           {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+          <div className="flex flex-col sm:flex-row gap-4 mb-8">
             <div className="flex-1">
               <div className="relative">
-                <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <MagnifyingGlassIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="text"
-                  placeholder={`Search ${activeTab}...`}
+                  placeholder={`Search ${activeTab.replace('-', ' ')}...`}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-12 pr-4 py-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 font-medium"
                 />
               </div>
             </div>
             
-            {(activeTab === 'requests' || activeTab === 'bookings') && (
+            {(activeTab === 'requests' || activeTab === 'bookings' || activeTab === 'guest-bookings') && (
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="px-4 py-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 font-medium min-w-[150px]"
               >
                 <option value="all">All Status</option>
                 <option value="pending">Pending</option>
@@ -416,6 +522,15 @@ const Mentorship: React.FC = () => {
                     <option value="confirmed">Confirmed</option>
                     <option value="completed">Completed</option>
                     <option value="cancelled">Cancelled</option>
+                  </>
+                )}
+                {activeTab === 'guest-bookings' && (
+                  <>
+                    <option value="confirmed">Confirmed</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="paid">Paid</option>
+                    <option value="failed">Failed</option>
                   </>
                 )}
               </select>
@@ -598,6 +713,147 @@ const Mentorship: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          ) : activeTab === 'guest-bookings' ? (
+            <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                      Customer
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                      Instructor
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                      Session Details
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                      Payment Status
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                      Booking Status
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                      Price
+                    </th>
+                    <th className="px-6 py-4 text-right text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
+                  {guestBookings
+                    .filter(booking => 
+                      searchTerm === '' || 
+                      booking.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      booking.customer_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      booking.instructor?.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      booking.instructor?.last_name.toLowerCase().includes(searchTerm.toLowerCase())
+                    )
+                    .filter(booking => 
+                      filterStatus === 'all' || 
+                      booking.booking_status.toLowerCase() === filterStatus.toLowerCase() ||
+                      booking.payment_status.toLowerCase() === filterStatus.toLowerCase()
+                    )
+                    .map((booking) => (
+                    <tr key={booking.guest_booking_id} className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 dark:hover:from-gray-700 dark:hover:to-gray-600 transition-all duration-200">
+                      <td className="px-6 py-5 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-full flex items-center justify-center shadow-lg">
+                            <UserIcon className="w-6 h-6 text-white" />
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-bold text-gray-900 dark:text-white">
+                              {booking.customer_name}
+                            </div>
+                            <div className="text-sm text-gray-600 dark:text-gray-300 font-medium">
+                              {booking.customer_email}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                              {booking.customer_phone}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900 dark:text-white">
+                          {booking.instructor?.first_name} {booking.instructor?.last_name}
+                        </div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                          {booking.instructor?.email}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-900 dark:text-white">
+                          <div className="flex items-center mb-1">
+                            <CalendarIcon className="w-4 h-4 mr-2" />
+                            {new Date(booking.preferred_date).toLocaleDateString()}
+                          </div>
+                          <div className="flex items-center">
+                            <ClockIcon className="w-4 h-4 mr-2" />
+                            {booking.preferred_time}
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {booking.preferred_topics.join(', ')}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {getPaymentBadge(booking.payment_status)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {getStatusBadge(booking.booking_status)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                        ${booking.session_price}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex items-center justify-end gap-2">
+                          {booking.payment_status === 'PAID' && booking.booking_status === 'PENDING' && (
+                            <Button
+                              onClick={() => handleConfirmGuestBooking(booking.guest_booking_id)}
+                              disabled={processingRequest === booking.guest_booking_id}
+                              className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                            >
+                              <CheckCircleIcon className="w-4 h-4 mr-2" />
+                              Confirm
+                            </Button>
+                          )}
+                          {booking.booking_status === 'CONFIRMED' && (
+                            <Button
+                              onClick={() => handleCompleteGuestBooking(booking.guest_booking_id)}
+                              disabled={processingRequest === booking.guest_booking_id}
+                              className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                            >
+                              <CheckCircleIcon className="w-4 h-4 mr-2" />
+                              Complete
+                            </Button>
+                          )}
+                          {booking.booking_status !== 'COMPLETED' && booking.booking_status !== 'CANCELLED' && (
+                            <Button
+                              onClick={() => handleCancelGuestBooking(booking.guest_booking_id)}
+                              disabled={processingRequest === booking.guest_booking_id}
+                              className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                            >
+                              <XCircleIcon className="w-4 h-4 mr-2" />
+                              Cancel
+                            </Button>
+                          )}
+                          <Button
+                            onClick={() => handleDeleteGuestBooking(booking.guest_booking_id)}
+                            disabled={processingRequest === booking.guest_booking_id}
+                            className="bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                          >
+                            <XMarkIcon className="w-4 h-4 mr-2" />
+                            Delete
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {slots.map((slot) => (
@@ -669,6 +925,20 @@ const Mentorship: React.FC = () => {
                 {searchTerm || filterStatus !== 'all'
                   ? 'Try adjusting your search or filters.'
                   : 'No mentorship sessions have been booked yet.'}
+              </p>
+            </div>
+          )}
+
+          {activeTab === 'guest-bookings' && guestBookings.length === 0 && (
+            <div className="text-center py-16">
+              <div className="mx-auto w-24 h-24 bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900/50 dark:to-pink-900/50 rounded-full flex items-center justify-center mb-6">
+                <UserIcon className="h-12 w-12 text-purple-600 dark:text-purple-400" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">No Guest Bookings Found</h3>
+              <p className="text-base text-gray-600 dark:text-gray-300 max-w-md mx-auto">
+                {searchTerm || filterStatus !== 'all'
+                  ? 'Try adjusting your search or filters to find what you\'re looking for.'
+                  : 'No guest mentorship bookings have been submitted yet. They will appear here once customers start booking sessions.'}
               </p>
             </div>
           )}

@@ -22,6 +22,29 @@ export interface Enrollment {
   };
 }
 
+export interface GuestCoursePurchase {
+  purchase_id: string;
+  course_id: string;
+  customer_name: string;
+  customer_email: string;
+  customer_phone?: string;
+  course_price: number;
+  access_code: string;
+  payment_status: 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
+  payment_method?: string;
+  transaction_id?: string;
+  created_at: string;
+  updated_at: string;
+  course?: {
+    title: string;
+    description: string;
+    instructor?: {
+      first_name: string;
+      last_name: string;
+    };
+  };
+}
+
 export interface CreateEnrollmentData {
   user_id: string;
   course_id: string;
@@ -120,6 +143,56 @@ class EnrollmentService {
     } catch (error: any) {
       console.error('Error fetching course enrollments:', error);
       throw new Error(error.response?.data?.error?.message || 'Failed to fetch course enrollments');
+    }
+  }
+
+  // Guest Course Purchase Methods
+  async getAllGuestCoursePurchases(): Promise<GuestCoursePurchase[]> {
+    try {
+      const response = await api.get('/guest-course-purchases');
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Error fetching guest course purchases:', error);
+      throw new Error(error.response?.data?.error?.message || 'Failed to fetch guest course purchases');
+    }
+  }
+
+  async getGuestCoursePurchaseById(id: string): Promise<GuestCoursePurchase> {
+    try {
+      const response = await api.get(`/guest-course-purchases/${id}`);
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Error fetching guest course purchase:', error);
+      throw new Error(error.response?.data?.error?.message || 'Failed to fetch guest course purchase');
+    }
+  }
+
+  async updateGuestCoursePurchaseStatus(
+    id: string, 
+    paymentStatus: 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED',
+    paymentMethod?: string,
+    transactionId?: string
+  ): Promise<GuestCoursePurchase> {
+    try {
+      const response = await api.put(`/guest-course-purchases/${id}/payment`, {
+        paymentStatus,
+        paymentMethod,
+        transactionId
+      });
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Error updating guest course purchase status:', error);
+      throw new Error(error.response?.data?.error?.message || 'Failed to update guest course purchase status');
+    }
+  }
+
+  async sendGuestPurchaseCredentials(id: string): Promise<void> {
+    try {
+      const response = await api.post(`/guest-course-purchases/${id}/send-credentials`);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error sending guest purchase credentials:', error);
+      throw new Error(error.response?.data?.error?.message || 'Failed to send guest purchase credentials');
     }
   }
 }
