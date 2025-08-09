@@ -6,7 +6,6 @@ import Card, { CardHeader, CardTitle, CardContent } from '../../components/ui/Ca
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { 
   MagnifyingGlassIcon, 
-  PencilIcon, 
   TrashIcon,
   UserIcon,
   EnvelopeIcon,
@@ -96,14 +95,15 @@ const Users: React.FC = () => {
       const response = await userService.getUsers(filters);
       
       if (response.success) {
-        const transformedUsers = response.data.map(user => ({
-          ...user,
-          id: user.user_id,
-          name: `${user.first_name} ${user.last_name}`,
-          createdAt: user.created_at,
-          lastLogin: user.last_login,
-          // Status is now properly set by userService.getUsers()
-        }));
+        const transformedUsers = response.data
+          .filter(user => user.role !== 'ADMIN') // Hide admin users
+          .map(user => ({
+            ...user,
+            id: user.user_id,
+            name: `${user.first_name} ${user.last_name}`,
+            createdAt: user.created_at,
+            // Status is now properly set by userService.getUsers()
+          }));
         
         setUsers(transformedUsers);
         setTotalPages(response.pagination.totalPages);
@@ -228,7 +228,7 @@ const Users: React.FC = () => {
                 <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white">Status</th>
                 <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white">Role</th>
                 <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white">Joined</th>
-                <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white">Last Login</th>
+
                 <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white">Actions</th>
               </tr>
             </thead>
@@ -268,16 +268,7 @@ const Users: React.FC = () => {
                       <span>{new Date(user.createdAt).toLocaleDateString()}</span>
                     </div>
                   </td>
-                  <td className="py-4 px-6">
-                    {user.lastLogin ? (
-                      <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                        <ShieldCheckIcon className="w-4 h-4" />
-                        <span>{new Date(user.lastLogin).toLocaleDateString()}</span>
-                      </div>
-                    ) : (
-                      <span className="text-sm text-gray-400">Never</span>
-                    )}
-                  </td>
+
                   <td className="py-4 px-6">
                     <div className="flex items-center justify-end space-x-2">
                       {/* Status Actions */}
@@ -300,10 +291,7 @@ const Users: React.FC = () => {
                         </Button>
                       )}
                       
-                      {/* Edit and Delete Actions */}
-                      <button className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                        <PencilIcon className="w-4 h-4" />
-                      </button>
+                      {/* Delete Action */}
                       <button 
                         onClick={() => handleDeleteUser(user.id)}
                         className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"

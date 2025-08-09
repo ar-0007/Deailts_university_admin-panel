@@ -195,6 +195,27 @@ class EnrollmentService {
       throw new Error(error.response?.data?.error?.message || 'Failed to send guest purchase credentials');
     }
   }
+
+  // Series Unlock Methods
+  async triggerComprehensiveSeriesUnlock(): Promise<{ message: string; processed: number; unlocked: number }> {
+    try {
+      const response = await api.post('/admin/series-unlock/comprehensive-check');
+      return response.data;
+    } catch (error: any) {
+      console.error('Error triggering comprehensive series unlock:', error);
+      throw new Error(error.response?.data?.error?.message || 'Failed to trigger comprehensive series unlock');
+    }
+  }
+
+  async getSeriesUnlockStatus(): Promise<any> {
+    try {
+      const response = await api.get('/admin/series-unlock/status');
+      return response.data;
+    } catch (error: any) {
+      console.error('Error fetching series unlock status:', error);
+      throw new Error(error.response?.data?.error?.message || 'Failed to fetch series unlock status');
+    }
+  }
 }
 
 const enrollmentService = new EnrollmentService();

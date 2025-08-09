@@ -173,6 +173,16 @@ class MentorshipService {
       throw new Error(error.response?.data?.error?.message || 'Failed to fetch user mentorship requests');
     }
   }
+
+  async getAllBookings(): Promise<MentorshipRequest[]> {
+    try {
+      const response = await api.get(`${this.baseURL}/requests`);
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Error fetching mentorship bookings:', error);
+      throw new Error(error.response?.data?.error?.message || 'Failed to fetch mentorship bookings');
+    }
+  }
 }
 
 const mentorshipService = new MentorshipService();

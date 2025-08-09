@@ -52,6 +52,10 @@ const Courses: React.FC = () => {
   const [videoPart, setVideoPart] = useState<number>(1);
   const [existingVideoSeries, setExistingVideoSeries] = useState<string[]>([]);
   const [showNewSeriesInput, setShowNewSeriesInput] = useState(false);
+  
+  // Series grouping state
+  const [groupBySeries, setGroupBySeries] = useState(true);
+  const [expandedSeries, setExpandedSeries] = useState<Set<string>>(new Set());
 
   // Form state for new course
   const [newCourse, setNewCourse] = useState<CreateCourseData>({
@@ -184,6 +188,58 @@ const Courses: React.FC = () => {
     
     return matchesSearch && matchesStatus && matchesLevel;
   });
+
+  // Group courses by series
+  const groupedCourses = React.useMemo(() => {
+    if (!groupBySeries) {
+      return { 'All Courses': filteredCourses };
+    }
+
+    const grouped: { [key: string]: Course[] } = {};
+    const ungrouped: Course[] = [];
+
+    filteredCourses.forEach(course => {
+      if (course.video_series && course.video_series.trim()) {
+        const seriesName = course.video_series.trim();
+        if (!grouped[seriesName]) {
+          grouped[seriesName] = [];
+        }
+        grouped[seriesName].push(course);
+      } else {
+        ungrouped.push(course);
+      }
+    });
+
+    // Sort courses within each series by video_part
+    Object.keys(grouped).forEach(seriesName => {
+      grouped[seriesName].sort((a, b) => (a.video_part || 1) - (b.video_part || 1));
+    });
+
+    // Add ungrouped courses
+    if (ungrouped.length > 0) {
+      grouped['Individual Courses'] = ungrouped;
+    }
+
+    return grouped;
+  }, [filteredCourses, groupBySeries]);
+
+  // Toggle series expansion
+  const toggleSeriesExpansion = (seriesName: string) => {
+    const newExpanded = new Set(expandedSeries);
+    if (newExpanded.has(seriesName)) {
+      newExpanded.delete(seriesName);
+    } else {
+      newExpanded.add(seriesName);
+    }
+    setExpandedSeries(newExpanded);
+  };
+
+  // Initialize expanded series when grouping changes
+  React.useEffect(() => {
+    if (groupBySeries) {
+      setExpandedSeries(new Set(Object.keys(groupedCourses)));
+    }
+  }, [groupBySeries]); // Removed groupedCourses from dependencies to prevent infinite loop
 
   const handleCreateCourse = async (e: React.FormEvent) => {
     e.preventDefault(); // Prevent default form submission
@@ -485,98 +541,219 @@ const Courses: React.FC = () => {
               className="input"
             >
               <option value="all">All Levels</option>
-              <option value="BEGINNER">Beginner</option>
-              <option value="INTERMEDIATE">Intermediate</option>
-              <option value="ADVANCED">Advanced</option>
+              <option value="beginner">Beginner</option>
+              <option value="intermediate">Intermediate</option>
+              <option value="advanced">Advanced</option>
             </select>
+            
+            <button
+              onClick={() => setGroupBySeries(!groupBySeries)}
+              className={`px-4 py-2 rounded-lg border transition-colors ${
+                groupBySeries
+                  ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900 dark:border-blue-700 dark:text-blue-300'
+                  : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
+              }`}
+            >
+              {groupBySeries ? 'Ungroup Series' : 'Group by Series'}
+            </button>
           </div>
         </div>
       </Card>
 
-      {/* Courses Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filteredCourses.map((course, index) => (
-          <Card key={course.course_id} variant="default" className={`hover:shadow-lg transition-shadow animate-slide-in-right delay-${index}`}>
-            <div className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    {course.title}
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-                    {course.description}
-                  </p>
+      {/* Courses Display */}
+      {groupBySeries ? (
+        <div className="space-y-6">
+          {Object.entries(groupedCourses).map(([seriesName, seriesCourses]) => (
+            <Card key={seriesName} variant="default" padding="lg">
+              <div 
+                className="flex items-center justify-between cursor-pointer mb-4"
+                onClick={() => toggleSeriesExpansion(seriesName)}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`transform transition-transform ${
+                    expandedSeries.has(seriesName) ? 'rotate-90' : ''
+                  }`}>
+                    <svg className="w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                    {seriesName}
+                  </h2>
+                  <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full">
+                    {seriesCourses.length} course{seriesCourses.length !== 1 ? 's' : ''}
+                  </span>
                 </div>
               </div>
+              
+              {expandedSeries.has(seriesName) && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {seriesCourses.map((course, index) => (
+                    <Card key={course.course_id} variant="default" className={`hover:shadow-lg transition-shadow animate-slide-in-right delay-${index}`}>
+                      <div className="p-6">
+                        {course.video_part && (
+                          <div className="mb-2">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs rounded-full">
+                              Part {course.video_part}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex-1">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                              {course.title}
+                            </h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
+                              {course.description}
+                            </p>
+                          </div>
+                        </div>
 
-              <div className="flex items-center gap-2 mb-4">
-                {getStatusBadge(course.is_published)}
-                {getLevelBadge(course.level)}
-              </div>
+                        <div className="flex items-center gap-2 mb-4">
+                          {getStatusBadge(course.is_published)}
+                          {getLevelBadge(course.level)}
+                        </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
-                <div>
-                  <span className="text-gray-500 dark:text-gray-400">Price:</span>
-                  <span className="ml-1 font-medium text-gray-900 dark:text-white">
-                    ${course.price}
-                  </span>
+                        <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+                          <div>
+                            <span className="text-gray-500 dark:text-gray-400">Price:</span>
+                            <span className="ml-1 font-medium text-gray-900 dark:text-white">
+                              ${course.price}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 dark:text-gray-400">Duration:</span>
+                            <span className="ml-1 font-medium text-gray-900 dark:text-white">
+                              {course.duration_hours}h
+                            </span>
+                          </div>
+
+                          <div>
+                            <span className="text-gray-500 dark:text-gray-400">Category:</span>
+                            <span className="ml-1 font-medium text-gray-900 dark:text-white">
+                              {course.categories?.name || 'N/A'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 dark:text-gray-400">Instructor:</span>
+                            <span className="ml-1 font-medium text-gray-900 dark:text-white">
+                              {course.instructor ? `${course.instructor.first_name} ${course.instructor.last_name}` : 'N/A'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            Created {new Date(course.created_at).toLocaleDateString()}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={() => handleViewCourse(course)}
+                              className="p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                            >
+                              <EyeIcon className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => handleEditCourse(course)}
+                              className="p-2 text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors"
+                            >
+                              <PencilIcon className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteCourse(course.course_id)}
+                              className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                            >
+                              <TrashIcon className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
                 </div>
-                <div>
-                  <span className="text-gray-500 dark:text-gray-400">Duration:</span>
-                  <span className="ml-1 font-medium text-gray-900 dark:text-white">
-                    {course.duration_hours}h
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-gray-500 dark:text-gray-400">Category:</span>
-                  <span className="ml-1 font-medium text-gray-900 dark:text-white">
-                    {course.categories?.name || 'N/A'}
-                  </span>
-                  {/* Debug info */}
-                  <div className="text-xs text-gray-400">
+              )}
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          {filteredCourses.map((course, index) => (
+            <Card key={course.course_id} variant="default" className={`hover:shadow-lg transition-shadow animate-slide-in-right delay-${index}`}>
+              <div className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                      {course.title}
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
+                      {course.description}
+                    </p>
                   </div>
                 </div>
-                <div>
-                  <span className="text-gray-500 dark:text-gray-400">Instructor:</span>
-                  <span className="ml-1 font-medium text-gray-900 dark:text-white">
-                    {course.instructor ? `${course.instructor.first_name} ${course.instructor.last_name}` : 'N/A'}
+
+                <div className="flex items-center gap-2 mb-4">
+                  {getStatusBadge(course.is_published)}
+                  {getLevelBadge(course.level)}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400">Price:</span>
+                    <span className="ml-1 font-medium text-gray-900 dark:text-white">
+                      ${course.price}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400">Duration:</span>
+                    <span className="ml-1 font-medium text-gray-900 dark:text-white">
+                      {course.duration_hours}h
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400">Category:</span>
+                    <span className="ml-1 font-medium text-gray-900 dark:text-white">
+                      {course.categories?.name || 'N/A'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400">Instructor:</span>
+                    <span className="ml-1 font-medium text-gray-900 dark:text-white">
+                      {course.instructor ? `${course.instructor.first_name} ${course.instructor.last_name}` : 'N/A'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    Created {new Date(course.created_at).toLocaleDateString()}
                   </span>
-                  {/* Debug info */}
-                  <div className="text-xs text-gray-400">
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => handleViewCourse(course)}
+                      className="p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                    >
+                      <EyeIcon className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleEditCourse(course)}
+                      className="p-2 text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors"
+                    >
+                      <PencilIcon className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteCourse(course.course_id)}
+                      className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               </div>
-
-              <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  Created {new Date(course.created_at).toLocaleDateString()}
-                </span>
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => handleViewCourse(course)}
-                    className="p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                  >
-                    <EyeIcon className="w-4 h-4" />
-                  </button>
-                  <button 
-                    onClick={() => handleEditCourse(course)}
-                    className="p-2 text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors"
-                  >
-                    <PencilIcon className="w-4 h-4" />
-                  </button>
-                  <button 
-                    onClick={() => handleDeleteCourse(course.course_id)}
-                    className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                  >
-                    <TrashIcon className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {filteredCourses.length === 0 && (
         <Card variant="default" padding="xl">

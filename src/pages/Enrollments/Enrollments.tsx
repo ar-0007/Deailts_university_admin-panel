@@ -10,7 +10,8 @@ import {
   CalendarIcon,
   AcademicCapIcon,
   ChartBarIcon,
-  EyeIcon
+  EyeIcon,
+  LockOpenIcon
 } from '@heroicons/react/24/outline';
 import enrollmentService, { type Enrollment, type GuestCoursePurchase } from '../../services/enrollmentService';
 import Button from '../../components/ui/Button';
@@ -29,6 +30,8 @@ const Enrollments: React.FC = () => {
   const [selectedPurchase, setSelectedPurchase] = useState<GuestCoursePurchase | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [error, setError] = useState('');
+  const [isUnlockingSeriesAccess, setIsUnlockingSeriesAccess] = useState(false);
+  const [unlockResult, setUnlockResult] = useState<{ message: string; processed: number; unlocked: number } | null>(null);
 
   // Fetch enrollments from API
   const fetchEnrollments = async () => {
@@ -165,7 +168,25 @@ const Enrollments: React.FC = () => {
     }
   };
 
+  // Handle comprehensive series unlock
+  const handleTriggerSeriesUnlock = async () => {
+    if (!confirm('This will check all customer purchases and unlock missing series parts. This may take a few moments. Continue?')) {
+      return;
+    }
 
+    setIsUnlockingSeriesAccess(true);
+    setUnlockResult(null);
+    try {
+      const result = await enrollmentService.triggerComprehensiveSeriesUnlock();
+      setUnlockResult(result);
+      alert(`Series unlock completed!\n\nProcessed: ${result.processed} customers\nNew courses unlocked: ${result.unlocked}\n\n${result.message}`);
+    } catch (err: any) {
+      setError(err.message || 'Failed to trigger series unlock');
+      alert('Failed to trigger series unlock. Please try again.');
+    } finally {
+      setIsUnlockingSeriesAccess(false);
+    }
+  };
 
   const filteredEnrollments = enrollments.filter(enrollment => {
     const matchesSearch = 
@@ -287,7 +308,43 @@ const Enrollments: React.FC = () => {
             Manage student course enrollments and guest course purchases
           </p>
         </div>
+        <div className="mt-4 sm:mt-0">
+          <Button
+            onClick={handleTriggerSeriesUnlock}
+            disabled={isUnlockingSeriesAccess}
+            className="bg-purple-600 hover:bg-purple-700 text-white"
+          >
+            {isUnlockingSeriesAccess ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                Processing...
+              </>
+            ) : (
+              <>
+                <LockOpenIcon className="w-4 h-4 mr-2" />
+                Unlock Series Access
+              </>
+            )}
+          </Button>
+        </div>
       </div>
+
+      {/* Series Unlock Info */}
+      {unlockResult && (
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+          <div className="flex items-center">
+            <CheckIcon className="w-5 h-5 text-green-600 dark:text-green-400 mr-2" />
+            <div>
+              <h3 className="text-sm font-medium text-green-800 dark:text-green-200">
+                Series Unlock Completed
+              </h3>
+              <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                Processed {unlockResult.processed} customers and unlocked {unlockResult.unlocked} new courses.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tab Navigation */}
       <div className="border-b border-gray-200 dark:border-gray-700">

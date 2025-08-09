@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  PlusIcon,
   MagnifyingGlassIcon,
   CalendarIcon,
   ClockIcon,
@@ -15,7 +14,7 @@ import {
   EnvelopeIcon,
   PhoneIcon
 } from '@heroicons/react/24/outline';
-import mentorshipService, { type MentorshipRequest, type MentorshipSlot } from '../../services/mentorshipService';
+import mentorshipService, { type MentorshipRequest } from '../../services/mentorshipService';
 import guestBookingService, { type GuestBooking } from '../../services/guestBookingService';
 import Button from '../../components/ui/Button';
 // import Card from '../../components/ui/Card';
@@ -46,9 +45,9 @@ const Mentorship: React.FC = () => {
   const [requests, setRequests] = useState<MentorshipRequest[]>([]);
   const [bookings, setBookings] = useState<MentorshipBooking[]>([]);
   const [guestBookings, setGuestBookings] = useState<GuestBooking[]>([]);
-  const [slots, setSlots] = useState<MentorshipSlot[]>([]);
+
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'requests' | 'bookings' | 'guest-bookings' | 'slots'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'bookings' | 'guest-bookings'>('requests');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [processingRequest, setProcessingRequest] = useState<string | null>(null);
@@ -75,29 +74,38 @@ const Mentorship: React.FC = () => {
     }
   };
 
-  // Fetch mentorship slots from API
-  const fetchSlots = async () => {
-    try {
-      const slotsData = await mentorshipService.getAllSlots();
-      setSlots(slotsData);
-    } catch (err: any) {
-      console.error('Failed to fetch slots:', err);
-    }
-  };
 
-  // Replace the fetchBookings function
+
+  // Fetch mentorship bookings from API
   const fetchBookings = async () => {
     try {
-      // Replace with actual API call
-      // const response = await fetch('/api/mentorship/bookings');
-      // const data = await response.json();
-      // setBookings(data);
-      
-      // For now, set empty array
-      setBookings([]);
+      setLoading(true);
+      const bookingsData = await mentorshipService.getAllBookings();
+      // Transform the data to match MentorshipBooking interface
+      const transformedBookings: MentorshipBooking[] = bookingsData.map(booking => ({
+        booking_id: booking.request_id,
+        user: booking.user,
+        mentor: {
+          first_name: 'Mentor', // This will be populated from slot data
+          last_name: '',
+          email: 'mentor@example.com'
+        },
+        date: booking.scheduled_date || '',
+        time_slot: booking.scheduled_time || '',
+        status: booking.status === 'pending' ? 'pending' : 
+                booking.status === 'approved' ? 'confirmed' : 
+                booking.status === 'completed' ? 'completed' : 'cancelled',
+        payment_status: booking.status === 'pending' ? 'pending' : 
+                       booking.status === 'approved' ? 'paid' : 'refunded',
+        price: 0, // This should come from slot data
+        zoom_link: booking.zoom_link
+      }));
+      setBookings(transformedBookings);
     } catch (err: any) {
       console.error('Failed to fetch bookings:', err);
       setError('Failed to load mentorship bookings');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -117,7 +125,6 @@ const Mentorship: React.FC = () => {
 
   useEffect(() => {
     fetchRequests();
-    fetchSlots();
     fetchBookings();
     fetchGuestBookings();
   }, []);
@@ -311,7 +318,10 @@ const Mentorship: React.FC = () => {
     
     const matchesStatus = filterStatus === 'all' || request.status === filterStatus;
     
-    return matchesSearch && matchesStatus;
+    // Only show pending and rejected requests (approved requests should be in bookings)
+    const isNotApproved = request.status !== 'approved';
+    
+    return matchesSearch && matchesStatus && isNotApproved;
   });
 
   const filteredBookings = bookings.filter(booking => {
@@ -323,7 +333,10 @@ const Mentorship: React.FC = () => {
     
     const matchesStatus = filterStatus === 'all' || booking.status === filterStatus;
     
-    return matchesSearch && matchesStatus;
+    // Only show approved bookings (status should be 'approved' or payment_status should be 'paid')
+    const isApproved = booking.status === 'confirmed' || booking.payment_status === 'paid';
+    
+    return matchesSearch && matchesStatus && isApproved;
   });
 
   const getStats = () => {
@@ -339,7 +352,7 @@ const Mentorship: React.FC = () => {
       pendingGuestBookings: guestBookings.filter(b => b.booking_status === 'PENDING').length,
       confirmedGuestBookings: guestBookings.filter(b => b.booking_status === 'CONFIRMED').length,
       completedGuestBookings: guestBookings.filter(b => b.booking_status === 'COMPLETED').length,
-      availableSlots: slots.filter(s => s.is_available).length,
+
       revenue: bookings
         .filter(b => b.payment_status === 'paid')
         .reduce((sum, b) => sum + b.price, 0) +
@@ -368,13 +381,10 @@ const Mentorship: React.FC = () => {
             Mentorship Dashboard
           </h1>
           <p className="mt-2 text-base text-gray-600 dark:text-gray-300 font-medium">
-            Manage mentorship requests, bookings and available time slots with ease
+            Manage mentorship requests and bookings with ease
           </p>
         </div>
-        <button className="mt-4 sm:mt-0 inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl">
-          <PlusIcon className="w-5 h-5 mr-2" />
-          Add Time Slot
-        </button>
+
       </div>
 
       {/* Stats Cards */}
@@ -471,19 +481,7 @@ const Mentorship: React.FC = () => {
                 Guest Bookings ({guestBookings.length})
               </span>
             </button>
-            <button
-              onClick={() => setActiveTab('slots')}
-              className={`py-4 px-6 font-semibold text-sm rounded-t-lg transition-all duration-200 ${
-                activeTab === 'slots'
-                  ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-500 shadow-sm'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white/50 dark:hover:bg-gray-800/50'
-              }`}
-            >
-              <span className="flex items-center">
-                <CalendarIcon className="w-4 h-4 mr-2" />
-                Available Slots ({slots.length})
-              </span>
-            </button>
+
           </nav>
         </div>
 
@@ -589,7 +587,7 @@ const Mentorship: React.FC = () => {
                         {getStatusBadge(request.status)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                        {new Date(request.created_at).toLocaleDateString()}
+                        {new Date(request.requested_at).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex items-center justify-end gap-2">
@@ -854,55 +852,7 @@ const Mentorship: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {slots.map((slot) => (
-                <div key={slot.slot_id} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 border border-gray-200 dark:border-gray-600">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-blue-600 rounded-full flex items-center justify-center">
-                        <span className="text-white text-sm font-medium">
-                          {slot.mentor.first_name.charAt(0)}{slot.mentor.last_name.charAt(0)}
-                        </span>
-                      </div>
-                      <div className="ml-3">
-                        <div className="text-sm font-medium text-gray-900 dark:text-white">
-                          {slot.mentor.first_name} {slot.mentor.last_name}
-                        </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          Mentor
-                        </div>
-                      </div>
-                    </div>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                      Available
-                    </span>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-                      <CalendarIcon className="w-4 h-4 mr-2" />
-                      {new Date(slot.date).toLocaleDateString()}
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-                      <ClockIcon className="w-4 h-4 mr-2" />
-                      {slot.time_slot}
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-                      <CurrencyDollarIcon className="w-4 h-4 mr-2" />
-                      ${slot.price}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
-                    <button className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors">
-                      Remove Slot
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          ) : null}
 
           {/* Empty States */}
           {activeTab === 'requests' && filteredRequests.length === 0 && (
@@ -943,15 +893,7 @@ const Mentorship: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'slots' && slots.length === 0 && (
-            <div className="text-center py-12">
-              <CalendarIcon className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No available slots</h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Create time slots for mentors to make them available for booking.
-              </p>
-            </div>
-          )}
+
         </div>
       </div>
 

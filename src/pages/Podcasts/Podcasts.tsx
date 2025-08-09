@@ -11,7 +11,9 @@ import {
   HeartIcon,
   XMarkIcon,
   ClockIcon,
-  SpeakerWaveIcon
+  SpeakerWaveIcon,
+  ArrowsPointingOutIcon,
+  ArrowsPointingInIcon
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolidIcon } from '@heroicons/react/24/solid';
 import podcastService, { type Podcast, type CreatePodcastData } from '../../services/podcastService';
@@ -35,6 +37,8 @@ const Podcasts: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState({ video: 0, thumbnail: 0 });
   const [isUploading, setIsUploading] = useState(false);
   const [likedPodcasts, setLikedPodcasts] = useState<Set<string>>(new Set());
+  const [fullscreenPodcast, setFullscreenPodcast] = useState<string | null>(null);
+  const [mutedPodcasts, setMutedPodcasts] = useState<Set<string>>(new Set());
   const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
 
   // Form state for new/edit podcast
@@ -62,7 +66,7 @@ const Podcasts: React.FC = () => {
     fetchPodcasts();
   }, []);
 
-  // Handle video play/pause
+  // Handle video play/pause with enhanced controls
   const togglePlay = async (podcast: Podcast) => {
     const videoElement = videoRefs.current[podcast.podcast_id];
     if (!videoElement) return;
@@ -78,37 +82,77 @@ const Podcasts: React.FC = () => {
         }
       });
       
-      // Simply play the video without tracking views
-      videoElement.play();
-      setPlayingPodcast(podcast.podcast_id);
+      // Play the selected video
+      try {
+        await videoElement.play();
+        setPlayingPodcast(podcast.podcast_id);
+        
+        // Update local view count
+        setPodcasts(prev => prev.map(p => 
+          p.podcast_id === podcast.podcast_id 
+            ? { ...p, plays_count: (p.plays_count || 0) + 1 }
+            : p
+        ));
+      } catch (err) {
+        console.error('Failed to play video:', err);
+      }
     }
   };
 
-  // Handle like toggle
-  const toggleLike = async (podcastId: string) => {
-    try {
-      const result = await podcastService.toggleLike(podcastId);
-      
-      // Update local state
-      setPodcasts(prev => prev.map(p => 
-        p.podcast_id === podcastId 
-          ? { ...p, likes_count: result.likes_count }
-          : p
-      ));
-      
-      // Update liked state
-      setLikedPodcasts(prev => {
+  // Handle mute/unmute
+  const toggleMute = (podcastId: string) => {
+    const videoElement = videoRefs.current[podcastId];
+    if (videoElement) {
+      videoElement.muted = !videoElement.muted;
+      setMutedPodcasts(prev => {
         const newSet = new Set(prev);
-        if (result.liked) {
+        if (videoElement.muted) {
           newSet.add(podcastId);
         } else {
           newSet.delete(podcastId);
         }
         return newSet;
       });
-    } catch (err: any) {
-      setError(err.message || 'Failed to toggle like');
     }
+  };
+
+  // Handle fullscreen toggle
+  const toggleFullscreen = (podcastId: string) => {
+    const videoElement = videoRefs.current[podcastId];
+    if (!videoElement) return;
+
+    if (fullscreenPodcast === podcastId) {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+      setFullscreenPodcast(null);
+    } else {
+      if (videoElement.requestFullscreen) {
+        videoElement.requestFullscreen();
+        setFullscreenPodcast(podcastId);
+      }
+    }
+  };
+
+  // Handle like toggle
+  const toggleLike = async (podcastId: string) => {
+    // Update local state
+    setPodcasts(prev => prev.map(p => 
+      p.podcast_id === podcastId 
+        ? { ...p, likes_count: (p.likes_count || 0) + 1 }
+        : p
+    ));
+    
+    // Update liked state
+    setLikedPodcasts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(podcastId)) {
+        newSet.delete(podcastId);
+      } else {
+        newSet.add(podcastId);
+      }
+      return newSet;
+    });
   };
 
   // Handle podcast creation
@@ -270,81 +314,83 @@ const Podcasts: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Video Feed</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            YouTube-like video content management
-          </p>
+      {/* Enhanced Header */}
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-8 text-white">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Podcast Studio</h1>
+            <p className="text-blue-100 text-lg">
+              Create, manage, and share your video content with style
+            </p>
+          </div>
+          <button 
+            onClick={() => setShowAddModal(true)}
+            className="mt-6 sm:mt-0 inline-flex items-center px-6 py-3 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-semibold rounded-xl transition-all duration-300 border border-white/30 hover:border-white/50"
+          >
+            <PlusIcon className="w-6 h-6 mr-2" />
+            Upload New Podcast
+          </button>
         </div>
-        <button 
-          onClick={() => setShowAddModal(true)}
-          className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
-        >
-          <PlusIcon className="w-5 h-5 mr-2" />
-          Upload Video
-        </button>
       </div>
 
-      {/* Stats Cards */}
+      {/* Enhanced Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
-              <MicrophoneIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-all duration-300">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-100 text-sm font-medium">Total Episodes</p>
+              <p className="text-3xl font-bold">{stats.total}</p>
             </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Episodes</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.total}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
-              <SpeakerWaveIcon className="w-6 h-6 text-green-600 dark:text-green-400" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Published</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.published}</p>
+            <div className="p-3 bg-white/20 rounded-xl">
+              <MicrophoneIcon className="w-8 h-8" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
-              <PlayIcon className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-all duration-300">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-green-100 text-sm font-medium">Published</p>
+              <p className="text-3xl font-bold">{stats.published}</p>
             </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Plays</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCount(stats.totalPlays)}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-red-100 dark:bg-red-900 rounded-lg">
-              <HeartIcon className="w-6 h-6 text-red-600 dark:text-red-400" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Likes</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCount(stats.totalLikes)}</p>
+            <div className="p-3 bg-white/20 rounded-xl">
+              <SpeakerWaveIcon className="w-8 h-8" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-yellow-100 dark:bg-yellow-900 rounded-lg">
-              <ClockIcon className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-all duration-300">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-purple-100 text-sm font-medium">Total Plays</p>
+              <p className="text-3xl font-bold">{formatCount(stats.totalPlays)}</p>
             </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Avg Duration</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.avgDuration}m</p>
+            <div className="p-3 bg-white/20 rounded-xl">
+              <PlayIcon className="w-8 h-8" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-all duration-300">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-red-100 text-sm font-medium">Total Likes</p>
+              <p className="text-3xl font-bold">{formatCount(stats.totalLikes)}</p>
+            </div>
+            <div className="p-3 bg-white/20 rounded-xl">
+              <HeartIcon className="w-8 h-8" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-all duration-300">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-yellow-100 text-sm font-medium">Avg Duration</p>
+              <p className="text-3xl font-bold">{stats.avgDuration}m</p>
+            </div>
+            <div className="p-3 bg-white/20 rounded-xl">
+              <ClockIcon className="w-8 h-8" />
             </div>
           </div>
         </div>
@@ -381,19 +427,22 @@ const Podcasts: React.FC = () => {
         </div>
       </div>
 
-      {/* YouTube-like Video Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      {/* Enhanced Video Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
         {filteredPodcasts.map((podcast) => (
-          <div key={podcast.podcast_id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-lg transition-all duration-200 group">
-            {/* Video Thumbnail/Player */}
-            <div className="relative aspect-video bg-gray-900 overflow-hidden">
-              {/* Thumbnail */}
+          <div key={podcast.podcast_id} className="group bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+            {/* Video Container */}
+            <div className="relative aspect-video bg-gradient-to-br from-gray-900 to-gray-800 overflow-hidden">
+              {/* Thumbnail with gradient overlay */}
               {podcast.thumbnail_url && playingPodcast !== podcast.podcast_id && (
-                <img
-                  src={podcast.thumbnail_url}
-                  alt={podcast.title}
-                  className="w-full h-full object-cover"
-                />
+                <div className="relative w-full h-full">
+                  <img
+                    src={podcast.thumbnail_url}
+                    alt={podcast.title}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                </div>
               )}
               
               {/* Video Player */}
@@ -407,111 +456,145 @@ const Podcasts: React.FC = () => {
                 className={`w-full h-full object-cover ${
                   playingPodcast === podcast.podcast_id ? 'block' : 'hidden'
                 }`}
-                controls={playingPodcast === podcast.podcast_id}
+                muted={mutedPodcasts.has(podcast.podcast_id)}
                 onEnded={() => setPlayingPodcast(null)}
                 onPause={() => setPlayingPodcast(null)}
               />
               
-              {/* Play Button Overlay */}
+              {/* Enhanced Play Button Overlay */}
               {playingPodcast !== podcast.podcast_id && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 group-hover:bg-opacity-50 transition-all duration-200">
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 group-hover:bg-black/60 transition-all duration-300">
                   <button
                     onClick={() => togglePlay(podcast)}
-                    className="flex items-center justify-center w-16 h-16 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full transition-all duration-200 transform hover:scale-110"
+                    className="flex items-center justify-center w-20 h-20 bg-white/95 hover:bg-white rounded-full transition-all duration-300 transform hover:scale-110 shadow-2xl"
                   >
-                    <PlayIcon className="w-8 h-8 text-gray-900 ml-1" />
+                    <PlayIcon className="w-10 h-10 text-gray-900 ml-1" />
                   </button>
+                </div>
+              )}
+              
+              {/* Video Controls Overlay (when playing) */}
+              {playingPodcast === podcast.podcast_id && (
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                                             <button
+                         onClick={() => toggleMute(podcast.podcast_id)}
+                         className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors"
+                       >
+                         {mutedPodcasts.has(podcast.podcast_id) ? (
+                           <SpeakerWaveIcon className="w-4 h-4 text-white" />
+                         ) : (
+                           <SpeakerWaveIcon className="w-4 h-4 text-white" />
+                         )}
+                       </button>
+                      <button
+                        onClick={() => toggleFullscreen(podcast.podcast_id)}
+                        className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors"
+                      >
+                        {fullscreenPodcast === podcast.podcast_id ? (
+                          <ArrowsPointingInIcon className="w-4 h-4 text-white" />
+                        ) : (
+                          <ArrowsPointingOutIcon className="w-4 h-4 text-white" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
               
               {/* Duration Badge */}
               {podcast.duration && (
-                <div className="absolute bottom-2 right-2 bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded">
+                <div className="absolute bottom-3 right-3 bg-black/80 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full font-medium">
                   {formatDuration(podcast.duration)}
                 </div>
               )}
 
               {/* Scheduled Time Badge */}
               {podcast.status === 'scheduled' && podcast.scheduled_at && (
-                <div className="absolute bottom-2 left-2 bg-blue-600 bg-opacity-90 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+                <div className="absolute bottom-3 left-3 bg-blue-600/90 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-1 font-medium">
                   <ClockIcon className="w-3 h-3" />
                   {new Date(podcast.scheduled_at).toLocaleDateString()} {new Date(podcast.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                 </div>
               )}
               
               {/* Status Badge */}
-              <div className="absolute top-2 left-2">
-                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+              <div className="absolute top-3 left-3">
+                <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold backdrop-blur-sm ${
                   podcast.status === 'published' 
-                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                    ? 'bg-green-500/90 text-white'
                     : podcast.status === 'scheduled'
-                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                    ? 'bg-blue-500/90 text-white'
                     : podcast.status === 'draft'
-                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                    : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                    ? 'bg-yellow-500/90 text-white'
+                    : 'bg-red-500/90 text-white'
                 }`}>
                   {podcast.status.charAt(0).toUpperCase() + podcast.status.slice(1)}
                 </span>
               </div>
             </div>
             
-            {/* Video Info */}
-            <div className="p-4">
-              <h3 className="font-semibold text-gray-900 dark:text-white text-sm line-clamp-2 mb-2">
+            {/* Enhanced Video Info */}
+            <div className="p-6">
+              <h3 className="font-bold text-gray-900 dark:text-white text-lg line-clamp-2 mb-3 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                 {podcast.title}
               </h3>
               
               {podcast.description && (
-                <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 mb-3">
+                <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-3 mb-4 leading-relaxed">
                   {podcast.description}
                 </p>
               )}
               
-              {/* Views and Likes */}
-              <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-3">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-1">
-                    <EyeIcon className="w-3 h-3" />
-                    <span>{formatCount(podcast.plays_count || 0)} views</span>
+              {/* Enhanced Stats */}
+              <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400 mb-4">
+                <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-gray-100 dark:bg-gray-700 rounded-full">
+                      <EyeIcon className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-medium">{formatCount(podcast.plays_count || 0)}</span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <HeartIcon className="w-3 h-3" />
-                    <span>{formatCount(podcast.likes_count || 0)} likes</span>
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-gray-100 dark:bg-gray-700 rounded-full">
+                      <HeartIcon className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-medium">{formatCount(podcast.likes_count || 0)}</span>
                   </div>
                 </div>
               </div>
               
-              {/* Action Buttons */}
-              <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-700">
-                <div className="flex items-center gap-2">
+              {/* Enhanced Action Buttons */}
+              <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex items-center gap-3">
                   <button
                     onClick={() => toggleLike(podcast.podcast_id)}
-                    className={`p-1.5 rounded-full transition-colors ${
+                    className={`p-2.5 rounded-full transition-all duration-200 ${
                       likedPodcasts.has(podcast.podcast_id)
-                        ? 'text-red-600 hover:text-red-700'
-                        : 'text-gray-400 hover:text-red-600'
+                        ? 'bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400'
+                        : 'bg-gray-100 text-gray-600 hover:bg-red-100 hover:text-red-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-red-900/30'
                     }`}
                   >
                     {likedPodcasts.has(podcast.podcast_id) ? (
-                      <HeartSolidIcon className="w-4 h-4" />
+                      <HeartSolidIcon className="w-5 h-5" />
                     ) : (
-                      <HeartIcon className="w-4 h-4" />
+                      <HeartIcon className="w-5 h-5" />
                     )}
                   </button>
                 </div>
                 
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => openEditModal(podcast)}
-                    className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors rounded-full"
+                    className="p-2.5 bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-blue-900/30 transition-all duration-200 rounded-full"
                   >
-                    <PencilIcon className="w-4 h-4" />
+                    <PencilIcon className="w-5 h-5" />
                   </button>
                   <button
                     onClick={() => handleDeletePodcast(podcast.podcast_id)}
-                    className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors rounded-full"
+                    className="p-2.5 bg-gray-100 text-gray-600 hover:bg-red-100 hover:text-red-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-red-900/30 transition-all duration-200 rounded-full"
                   >
-                    <TrashIcon className="w-4 h-4" />
+                    <TrashIcon className="w-5 h-5" />
                   </button>
                 </div>
               </div>

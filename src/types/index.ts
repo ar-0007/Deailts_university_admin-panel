@@ -8,12 +8,10 @@ export interface User {
   status: 'active' | 'blocked'; // Remove 'pending' since it's not supported
   is_active: boolean;
   created_at: string;
-  last_login?: string;
   // Computed properties for compatibility
   id: string;
   name: string;
   createdAt: string;
-  lastLogin?: string;
 }
 
 // Course types
