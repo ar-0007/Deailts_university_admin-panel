@@ -10,6 +10,8 @@ import Courses from './pages/Courses';
 import Enrollments from './pages/Enrollments';
 import Mentorship from './pages/Mentorship';
 import Assignments from './pages/Assignments';
+import Submissions from './pages/Submissions/Submissions';
+import Quizzes from './pages/Quizzes';
 import Podcasts from './pages/Podcasts';
 import Instructors from './pages/Instructors';
 
@@ -120,6 +122,22 @@ const App: React.FC = () => {
                 element={
                   <ProtectedRoute>
                     <Assignments />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/submissions" 
+                element={
+                  <ProtectedRoute>
+                    <Submissions />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/quizzes" 
+                element={
+                  <ProtectedRoute>
+                    <Quizzes />
                   </ProtectedRoute>
                 } 
               />

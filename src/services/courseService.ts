@@ -61,6 +61,16 @@ export interface UploadResponse {
   mimetype: string;
 }
 
+export interface Chapter {
+  chapter_id: string;
+  title: string;
+  course_id: string;
+  order_index?: number;
+  description?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 class CourseService {
   async getAllCourses(isPublished?: boolean): Promise<Course[]> {
     try {
@@ -274,6 +284,16 @@ class CourseService {
         totalStudents: 0,
         revenue: 0
       };
+    }
+  }
+
+  async getChaptersByCourse(courseId: string): Promise<Chapter[]> {
+    try {
+      const response = await api.get(`/chapters/course/${courseId}`);
+      return response.data.data || [];
+    } catch (error) {
+      console.error('Error fetching chapters by course:', error);
+      return [];
     }
   }
 }

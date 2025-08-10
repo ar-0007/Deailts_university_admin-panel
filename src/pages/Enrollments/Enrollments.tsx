@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
   MagnifyingGlassIcon,
-  FunnelIcon,
+  // FunnelIcon,
   CheckIcon,
   XMarkIcon,
   ClockIcon,
   UserIcon,
-  BookOpenIcon,
-  CalendarIcon,
+  // BookOpenIcon,
+  // CalendarIcon,
   AcademicCapIcon,
   ChartBarIcon,
-  EyeIcon,
+  // EyeIcon,
   LockOpenIcon
 } from '@heroicons/react/24/outline';
 import enrollmentService, { type Enrollment, type GuestCoursePurchase } from '../../services/enrollmentService';

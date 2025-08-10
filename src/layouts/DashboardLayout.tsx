@@ -9,8 +9,9 @@ import {
   AcademicCapIcon,
   UserGroupIcon,
   DocumentTextIcon,
+  QuestionMarkCircleIcon,
   MicrophoneIcon,
-  SpeakerWaveIcon,
+
   Bars3Icon,
   XMarkIcon,
   SunIcon,
@@ -59,6 +60,16 @@ const navItems: NavItem[] = [
     name: 'Assignments',
     path: '/assignments',
     icon: DocumentTextIcon
+  },
+  {
+    name: 'Submissions',
+    path: '/submissions',
+    icon: AcademicCapIcon
+  },
+  {
+    name: 'Quizzes',
+    path: '/quizzes',
+    icon: QuestionMarkCircleIcon
   },
   {
     name: 'Podcasts',

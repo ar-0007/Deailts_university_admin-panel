@@ -206,6 +206,17 @@ class AssignmentService {
   async getAssignmentsByChapter(chapterId: string): Promise<Assignment[]> {
     return this.getAllAssignments(undefined, chapterId);
   }
+
+  // Get all submissions (admin only)
+  async getAllSubmissions(): Promise<any[]> {
+    try {
+      const response = await api.get('/submissions?admin=true');
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Error fetching all submissions:', error);
+      throw new Error(error.response?.data?.error?.message || 'Failed to fetch submissions');
+    }
+  }
 }
 
 const assignmentService = new AssignmentService();

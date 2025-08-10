@@ -19,31 +19,12 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
-interface Submission {
-  submission_id: string;
-  assignment_id: string;
-  user_id: string;
-  submitted_at: string;
-  score?: number;
-  feedback?: string;
-  status: 'submitted' | 'graded' | 'late';
-  user: {
-    first_name: string;
-    last_name: string;
-    email: string;
-  };
-  assignment: {
-    title: string;
-    max_score: number;
-  };
-}
+
 
 const Assignments: React.FC = () => {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'assignments' | 'submissions'>('assignments');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [showAddModal, setShowAddModal] = useState(false);
@@ -89,6 +70,8 @@ const Assignments: React.FC = () => {
       console.error('Failed to fetch courses:', err);
     }
   };
+
+
 
   useEffect(() => {
     fetchAssignments();
@@ -228,16 +211,7 @@ const Assignments: React.FC = () => {
     return matchesSearch && matchesStatus;
   });
 
-  const filteredSubmissions = submissions.filter(submission => {
-    const matchesSearch =
-      submission.user.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      submission.user.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      submission.assignment.title.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesStatus = filterStatus === 'all' || submission.status === filterStatus;
-
-    return matchesSearch && matchesStatus;
-  });
 
   const getAssignmentStats = () => {
     return {
@@ -248,20 +222,7 @@ const Assignments: React.FC = () => {
     };
   };
 
-  const getSubmissionStats = () => {
-    return {
-      total: submissions.length,
-      submitted: submissions.filter(s => s.status === 'submitted').length,
-      graded: submissions.filter(s => s.status === 'graded').length,
-      late: submissions.filter(s => s.status === 'late').length,
-      averageScore: submissions
-        .filter(s => s.score !== undefined)
-        .reduce((sum, s, _, arr) => sum + (s.score! / arr.length), 0)
-    };
-  };
-
   const assignmentStats = getAssignmentStats();
-  const submissionStats = getSubmissionStats();
 
   if (loading) {
     return (
@@ -278,7 +239,7 @@ const Assignments: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Assignments</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Manage course assignments and student submissions
+            Manage course assignments
           </p>
         </div>
         <button
@@ -349,30 +310,8 @@ const Assignments: React.FC = () => {
 
 
 
-      {/* Tabs */}
+      {/* Content */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="border-b border-gray-200 dark:border-gray-700">
-          <nav className="flex space-x-8 px-6">
-            <button
-              onClick={() => setActiveTab('assignments')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'assignments'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                }`}
-            >
-              Assignments ({assignments.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('submissions')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'submissions'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                }`}
-            >
-              Submissions ({submissions.length})
-            </button>
-          </nav>
-        </div>
 
         <div className="p-6">
           {/* Filters */}
@@ -382,7 +321,7 @@ const Assignments: React.FC = () => {
                 <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="text"
-                  placeholder={activeTab === 'assignments' ? "Search assignments..." : "Search submissions..."}
+                  placeholder="Search assignments..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -400,10 +339,9 @@ const Assignments: React.FC = () => {
             </select>
           </div>
 
-          {/* Content */}
-          {activeTab === 'assignments' ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {filteredAssignments.map((assignment) => (
+          {/* Assignments Content */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {filteredAssignments.map((assignment) => (
                 <div key={assignment.assignment_id} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 border border-gray-200 dark:border-gray-600">
 
                   <div className="flex items-start justify-between mb-4">
@@ -435,15 +373,15 @@ const Assignments: React.FC = () => {
                       </div>
                     </div>
                     <div>
-                      <span className="text-gray-500 dark:text-gray-400">Submissions:</span>
+                      <span className="text-gray-500 dark:text-gray-400">Created:</span>
                       <div className="font-medium text-gray-900 dark:text-white">
-                        {assignment.submissions_count || 0}
+                        {new Date(assignment.created_at).toLocaleDateString()}
                       </div>
                     </div>
                     <div>
-                      <span className="text-gray-500 dark:text-gray-400">Graded:</span>
+                      <span className="text-gray-500 dark:text-gray-400">Status:</span>
                       <div className="font-medium text-gray-900 dark:text-white">
-                        {assignment.graded_count || 0}/{assignment.submissions_count || 0}
+                        {assignment.is_published ? 'Published' : 'Draft'}
                       </div>
                     </div>
                   </div>
@@ -472,60 +410,9 @@ const Assignments: React.FC = () => {
                   </div>
                 </div>
               ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {filteredSubmissions.map((submission) => (
-                <div key={submission.submission_id} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 border border-gray-200 dark:border-gray-600">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                        {submission.assignment.title}
-                      </h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                        Submitted by: {submission.user.first_name} {submission.user.last_name}
-                      </p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
-                        Email: {submission.user.email}
-                      </p>
-                    </div>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      submission.status === 'graded' 
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                        : submission.status === 'late'
-                        ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' 
-                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                    }`}>
-                      {submission.status || 'Pending'}
-                    </span>
-                  </div>
+          </div>
 
-                  <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
-                    <div>
-                      <span className="text-gray-500 dark:text-gray-400">Submitted At:</span>
-                      <div className="font-medium text-gray-900 dark:text-white">
-                        {new Date(submission.submitted_at).toLocaleDateString()} {new Date(submission.submitted_at).toLocaleTimeString()}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-gray-500 dark:text-gray-400">Score:</span>
-                      <div className="font-medium text-gray-900 dark:text-white">
-                        {submission.score !== undefined ? `${submission.score}/${submission.assignment.max_score}` : 'N/A'}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-600">
-                    <div className="flex items-center gap-2">
-                      {/* Add view/edit/grade submission buttons here if needed */}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {filteredAssignments.length === 0 && activeTab === 'assignments' && (
+          {filteredAssignments.length === 0 && (
             <Card variant="default" padding="xl">
               <div className="text-center py-12">
                 <DocumentTextIcon className="mx-auto h-12 w-12 text-gray-400" />
@@ -543,20 +430,6 @@ const Assignments: React.FC = () => {
                     Create Assignment
                   </Button>
                 </div>
-              </div>
-            </Card>
-          )}
-
-          {filteredSubmissions.length === 0 && activeTab === 'submissions' && (
-            <Card variant="default" padding="xl">
-              <div className="text-center py-12">
-                <DocumentTextIcon className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No submissions found</h3>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                  {searchTerm || filterStatus !== 'all'
-                    ? 'Try adjusting your search or filters.'
-                    : 'No submissions available yet.'}
-                </p>
               </div>
             </Card>
           )}
