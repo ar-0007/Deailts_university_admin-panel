@@ -189,11 +189,11 @@ const Enrollments: React.FC = () => {
   };
 
   const filteredEnrollments = enrollments.filter(enrollment => {
-    const matchesSearch = 
-      enrollment.user.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      enrollment.user.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      enrollment.user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      enrollment.course.title.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = !searchTerm || 
+      (enrollment.user?.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+      (enrollment.user?.last_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+      (enrollment.user?.email?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+      (enrollment.course?.title?.toLowerCase().includes(searchTerm.toLowerCase()) || false);
     
     const matchesStatus = filterStatus === 'all' || enrollment.status === filterStatus;
     
@@ -201,7 +201,7 @@ const Enrollments: React.FC = () => {
   });
 
   const filteredGuestPurchases = guestPurchases.filter(purchase => {
-    const matchesSearch = 
+    const matchesSearch = !searchTerm ||
       purchase.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       purchase.customer_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       purchase.course?.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -227,35 +227,18 @@ const Enrollments: React.FC = () => {
       completed: AcademicCapIcon
     };
 
-    const IconComponent = statusIcons[status as keyof typeof statusIcons];
+    const IconComponent = statusIcons[status as keyof typeof statusIcons] || ClockIcon;
+    const statusStyle = statusStyles[status as keyof typeof statusStyles] || 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
 
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyles[status as keyof typeof statusStyles]}`}>
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle}`}>
         <IconComponent className="w-3 h-3 mr-1" />
         {status.charAt(0).toUpperCase() + status.slice(1)}
       </span>
     );
   };
 
-  const handleApprove = (enrollmentId: string) => {
-    setEnrollments(prev => 
-      prev.map(enrollment => 
-        enrollment.enrollment_id === enrollmentId 
-          ? { ...enrollment, status: 'approved' as const, approved_at: new Date().toISOString() }
-          : enrollment
-      )
-    );
-  };
 
-  const handleReject = (enrollmentId: string) => {
-    setEnrollments(prev => 
-      prev.map(enrollment => 
-        enrollment.enrollment_id === enrollmentId 
-          ? { ...enrollment, status: 'rejected' as const }
-          : enrollment
-      )
-    );
-  };
 
   const getStats = () => {
     const enrollmentStats = {
@@ -525,17 +508,17 @@ const Enrollments: React.FC = () => {
                       </div>
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900 dark:text-white">
-                          {enrollment.user.first_name} {enrollment.user.last_name}
+                          {enrollment.user?.first_name || 'N/A'} {enrollment.user?.last_name || ''}
                         </div>
                         <div className="text-sm text-gray-500 dark:text-gray-400">
-                          {enrollment.user.email}
+                          {enrollment.user?.email || 'N/A'}
                         </div>
                       </div>
                     </div>
                   </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 dark:text-white">{enrollment.course.title}</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">${enrollment.course.price}</div>
+                      <div className="text-sm text-gray-900 dark:text-white">{enrollment.course?.title || 'N/A'}</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">${enrollment.course?.price || 0}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {getStatusBadge(enrollment.status)}
@@ -547,14 +530,14 @@ const Enrollments: React.FC = () => {
                     {enrollment.status === 'pending' && (
                         <div className="flex space-x-2">
                           <Button
-                            onClick={() => handleApprove(enrollment.enrollment_id)}
+                            onClick={() => handleApproveEnrollment(enrollment.enrollment_id)}
                             disabled={processingEnrollment === enrollment.enrollment_id}
                             className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 text-xs"
                           >
                             {processingEnrollment === enrollment.enrollment_id ? 'Processing...' : 'Approve'}
                           </Button>
                           <Button
-                            onClick={() => handleReject(enrollment.enrollment_id)}
+                            onClick={() => handleRejectEnrollment(enrollment.enrollment_id)}
                           disabled={processingEnrollment === enrollment.enrollment_id}
                             className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 text-xs"
                           >

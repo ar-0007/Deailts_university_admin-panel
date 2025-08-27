@@ -61,12 +61,14 @@ const Mentorship: React.FC = () => {
     zoom_link: ''
   });
 
-  // Fetch mentorship requests from API
+  // Fetch mentorship requests from API (excluding approved requests)
   const fetchRequests = async () => {
     try {
       setLoading(true);
-      const requestsData = await mentorshipService.getAllRequests();
-      setRequests(requestsData);
+      const allRequests = await mentorshipService.getAllRequests();
+      // Filter out approved requests as they should appear in bookings tab
+      const nonApprovedRequests = allRequests.filter(request => request.status !== 'approved');
+      setRequests(nonApprovedRequests);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch mentorship requests');
     } finally {
@@ -80,26 +82,39 @@ const Mentorship: React.FC = () => {
   const fetchBookings = async () => {
     try {
       setLoading(true);
-      const bookingsData = await mentorshipService.getAllBookings();
+      const [bookingsData, slotsData] = await Promise.all([
+        mentorshipService.getAllBookings(),
+        mentorshipService.getAllSlots()
+      ]);
+      
       // Transform the data to match MentorshipBooking interface
-      const transformedBookings: MentorshipBooking[] = bookingsData.map(booking => ({
-        booking_id: booking.request_id,
-        user: booking.user,
-        mentor: {
-          first_name: 'Mentor', // This will be populated from slot data
-          last_name: '',
-          email: 'mentor@example.com'
-        },
-        date: booking.scheduled_date || '',
-        time_slot: booking.scheduled_time || '',
-        status: booking.status === 'pending' ? 'pending' : 
-                booking.status === 'approved' ? 'confirmed' : 
-                booking.status === 'completed' ? 'completed' : 'cancelled',
-        payment_status: booking.status === 'pending' ? 'pending' : 
-                       booking.status === 'approved' ? 'paid' : 'refunded',
-        price: 0, // This should come from slot data
-        zoom_link: booking.zoom_link
-      }));
+      const transformedBookings: MentorshipBooking[] = bookingsData.map(booking => {
+        // Find matching slot for mentor and price information
+        const matchingSlot = slotsData.find(slot => 
+          slot.date === booking.scheduled_date && 
+          slot.time_slot === booking.scheduled_time
+        );
+        
+        return {
+          booking_id: booking.request_id,
+          user: booking.user,
+          mentor: matchingSlot?.mentor || {
+            first_name: 'Unknown',
+            last_name: 'Mentor',
+            email: 'mentor@example.com'
+          },
+          date: booking.scheduled_date || '',
+          time_slot: booking.scheduled_time || '',
+          status: booking.status === 'approved' ? 'confirmed' : 
+                  booking.status === 'completed' ? 'completed' : 
+                  booking.status === 'rejected' ? 'cancelled' : 'pending',
+          payment_status: booking.status === 'approved' ? 'paid' : 
+                         booking.status === 'completed' ? 'paid' : 
+                         booking.status === 'rejected' ? 'refunded' : 'pending',
+          price: matchingSlot?.price || 0,
+          zoom_link: booking.zoom_link
+        };
+      });
       setBookings(transformedBookings);
     } catch (err: any) {
       console.error('Failed to fetch bookings:', err);
@@ -154,13 +169,9 @@ const Mentorship: React.FC = () => {
       });
 
       if (updatedRequest) {
-        setRequests(prev => 
-          prev.map(request => 
-            request.request_id === selectedRequest.request_id 
-              ? { ...request, status: 'approved', scheduled_date: scheduleData.date, scheduled_time: scheduleData.time }
-              : request
-          )
-        );
+        // Remove approved request from requests and refresh bookings
+        setRequests(prev => prev.filter(request => request.request_id !== selectedRequest.request_id));
+        await fetchBookings(); // Refresh bookings to show the new booking
         setShowScheduleModal(false);
         setSelectedRequest(null);
         setScheduleData({ date: '', time: '', duration: 60, zoom_link: '' });
@@ -303,8 +314,12 @@ const Mentorship: React.FC = () => {
       cancelled: 'bg-gradient-to-r from-gray-100 to-slate-100 text-gray-800 dark:from-gray-900/50 dark:to-slate-900/50 dark:text-gray-200 border border-gray-200 dark:border-gray-700'
     };
 
+    // Get the style for the status, with fallback for unknown statuses
+    const styleKey = status.toLowerCase() as keyof typeof statusStyles;
+    const statusStyle = statusStyles[styleKey] || statusStyles.pending;
+
     return (
-      <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide shadow-sm ${statusStyles[status.toLowerCase() as keyof typeof statusStyles]}`}>
+      <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide shadow-sm ${statusStyle}`}>
         {status.charAt(0).toUpperCase() + status.slice(1)}
       </span>
     );
@@ -333,15 +348,15 @@ const Mentorship: React.FC = () => {
     
     const matchesStatus = filterStatus === 'all' || booking.status === filterStatus;
     
-    // Only show approved bookings (status should be 'approved' or payment_status should be 'paid')
-    const isApproved = booking.status === 'confirmed' || booking.payment_status === 'paid';
+    // Only show bookings with paid payment status (confirmed bookings)
+    const isPaidBooking = booking.payment_status === 'paid';
     
-    return matchesSearch && matchesStatus && isApproved;
+    return matchesSearch && matchesStatus && isPaidBooking;
   });
 
   const getStats = () => {
     return {
-      totalRequests: requests.length,
+      totalRequests: requests.filter(r => r.status !== 'approved').length,
       pendingRequests: requests.filter(r => r.status === 'pending').length,
       approvedRequests: requests.filter(r => r.status === 'approved').length,
       totalBookings: bookings.length,

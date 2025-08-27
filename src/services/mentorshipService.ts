@@ -176,8 +176,13 @@ class MentorshipService {
 
   async getAllBookings(): Promise<MentorshipRequest[]> {
     try {
-      const response = await api.get(`${this.baseURL}/requests`);
-      return response.data.data;
+      // Get only approved requests that have been scheduled (these are actual bookings)
+      const response = await api.get(`${this.baseURL}/requests`, {
+        params: { status: 'approved' }
+      });
+      return response.data.data.filter((request: MentorshipRequest) => 
+        request.scheduled_date && request.scheduled_time
+      );
     } catch (error: any) {
       console.error('Error fetching mentorship bookings:', error);
       throw new Error(error.response?.data?.error?.message || 'Failed to fetch mentorship bookings');
