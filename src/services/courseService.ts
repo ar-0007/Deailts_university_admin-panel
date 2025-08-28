@@ -1,5 +1,12 @@
 import api from './api';
 
+export interface CourseDocument {
+  url: string;
+  filename: string;
+  description?: string;
+  uploaded_at: string;
+}
+
 export interface Course {
   course_id: string;
   title: string;
@@ -14,6 +21,7 @@ export interface Course {
   is_published: boolean;
   video_series?: string;
   video_part?: number;
+  course_documents?: CourseDocument[];
   created_at: string;
   updated_at: string;
   categories?: {
@@ -96,7 +104,8 @@ class CourseService {
   async createCourse(
     courseData: CreateCourseData, 
     thumbnailFile?: File | null, 
-    introVideoFile?: File | null
+    introVideoFile?: File | null,
+    documentFiles?: File[]
   ): Promise<Course | null> {
     try {
       const formData = new FormData();
@@ -116,6 +125,15 @@ class CourseService {
       // Add files
       if (thumbnailFile) formData.append('thumbnail', thumbnailFile);
       if (introVideoFile) formData.append('intro_video', introVideoFile);
+      
+      // Add document files
+      if (documentFiles && documentFiles.length > 0) {
+        documentFiles.forEach((file, index) => {
+          formData.append('documents', file);
+          // Add description if needed (can be extended later)
+          formData.append(`document_description_${index}`, '');
+        });
+      }
 
       const response = await api.post('/courses', formData, {
         headers: {

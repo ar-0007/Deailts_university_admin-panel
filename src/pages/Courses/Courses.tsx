@@ -21,6 +21,14 @@ import LoadingSpinner from '../../components/ui/LoadingSpinner';
 const Courses: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Add state for course statistics
+  const [courseStats, setCourseStats] = useState({
+    total: 0,
+    published: 0,
+    totalStudents: 0,
+    revenue: 0
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterLevel, setFilterLevel] = useState<string>('all');
@@ -37,6 +45,7 @@ const Courses: React.FC = () => {
   const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [documentFiles, setDocumentFiles] = useState<File[]>([]);
   const [uploadProgress, setUploadProgress] = useState({ thumbnail: 0, video: 0 });
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
@@ -75,7 +84,6 @@ const Courses: React.FC = () => {
       setLoading(true);
       // Add query parameter to get all courses (published and unpublished)
       const coursesData = await courseService.getAllCourses(false); // false = get all courses
-      console.log('Fetched courses data:', coursesData);
       setCourses(coursesData);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch courses');
@@ -108,7 +116,6 @@ const Courses: React.FC = () => {
   const fetchExistingVideoSeries = async () => {
     try {
       const data = await courseService.getExistingVideoSeries();
-      console.log('Fetched video series:', data);
       setExistingVideoSeries(data || []);
     } catch (error) {
       console.error('Error fetching video series:', error);
@@ -127,11 +134,22 @@ const Courses: React.FC = () => {
     return maxPart + 1;
   };
 
+  // Add function to fetch course statistics
+  const fetchCourseStats = async () => {
+    try {
+      const stats = await courseService.getCourseStats();
+      setCourseStats(stats);
+    } catch (err) {
+      console.error('Failed to fetch course stats:', err);
+    }
+  };
+
   useEffect(() => {
     fetchCourses();
     fetchCategories();
     fetchInstructors();
     fetchExistingVideoSeries();
+    fetchCourseStats(); // Add this line
   }, []);
 
   const handleViewCourse = (course: Course) => {
@@ -284,7 +302,8 @@ const Courses: React.FC = () => {
       const createdCourse = await courseService.createCourse(
         courseDataWithSeries,
         thumbnailFile,
-        videoFile
+        videoFile,
+        documentFiles
       );
       
       if (createdCourse) {
@@ -302,6 +321,7 @@ const Courses: React.FC = () => {
         });
         setThumbnailFile(null);
         setVideoFile(null);
+        setDocumentFiles([]);
         setVideoSeries('');
         setVideoPart(1);
         setShowNewSeriesInput(false);
@@ -460,7 +480,7 @@ const Courses: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Courses</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{courses.length}</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{courseStats.total}</p>
             </div>
           </div>
         </Card>
@@ -473,7 +493,7 @@ const Courses: React.FC = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Students</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                0
+                {courseStats.totalStudents}
               </p>
             </div>
           </div>
@@ -487,7 +507,7 @@ const Courses: React.FC = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Published</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {courses.filter(c => c.is_published).length}
+                {courseStats.published}
               </p>
             </div>
           </div>
@@ -501,7 +521,7 @@ const Courses: React.FC = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Revenue</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                $0
+                ${courseStats.revenue.toLocaleString()}
               </p>
             </div>
           </div>
@@ -1107,6 +1127,37 @@ const Courses: React.FC = () => {
                   required
                 />
               </div>
+
+              <div>
+                <label htmlFor="documents" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Course Documents</label>
+                <input
+                  type="file"
+                  id="documents"
+                  className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                  accept=".pdf,.doc,.docx,.txt"
+                  multiple
+                  onChange={(e) => setDocumentFiles(e.target.files ? Array.from(e.target.files) : [])}
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Upload PDF, Word documents, or text files. You can select multiple files.
+                </p>
+                {documentFiles.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {documentFiles.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 p-2 rounded">
+                        <span>{file.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setDocumentFiles(documentFiles.filter((_, i) => i !== index))}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               
               <div className="flex items-center">
                 <input
@@ -1222,6 +1273,50 @@ const Courses: React.FC = () => {
                   <span className="ml-1 font-medium text-gray-900 dark:text-white">{new Date(selectedCourse.created_at).toLocaleDateString()}</span>
                 </div>
               </div>
+              
+              {/* Course Documents Section */}
+              {selectedCourse.course_documents && selectedCourse.course_documents.length > 0 && (
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                  <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">Course Documents</h4>
+                  <div className="space-y-2">
+                    {selectedCourse.course_documents.map((doc, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                        <div className="flex items-center space-x-3">
+                          <div className="flex-shrink-0">
+                            <svg className="w-8 h-8 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                              {doc.filename}
+                            </p>
+                            {doc.description && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                {doc.description}
+                              </p>
+                            )}
+                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                              Uploaded: {new Date(doc.uploaded_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                        >
+                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          Download
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

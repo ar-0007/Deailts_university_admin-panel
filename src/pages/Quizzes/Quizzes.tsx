@@ -32,6 +32,8 @@ const Quizzes: React.FC = () => {
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
   const [selectedCourseId, setSelectedCourseId] = useState('');
+  const [chaptersLoading, setChaptersLoading] = useState<boolean>(false);
+  const [chaptersError, setChaptersError] = useState<string>('');
 
   const [newQuiz, setNewQuiz] = useState<CreateQuizData>({
     title: '',
@@ -76,12 +78,24 @@ const Quizzes: React.FC = () => {
 
   // Fetch chapters when course is selected
   const fetchChaptersByCourse = async (courseId: string) => {
+    if (!courseId) {
+      setChapters([]);
+      setChaptersError('');
+      return;
+    }
+
     try {
+      setChaptersLoading(true);
+      setChaptersError('');
+      setChapters([]); // Clear existing chapters first
       const chaptersData = await courseService.getChaptersByCourse(courseId);
-      setChapters(chaptersData);
-    } catch (err) {
+      setChapters(chaptersData || []);
+    } catch (err: any) {
       console.error('Failed to fetch chapters:', err);
       setChapters([]);
+      setChaptersError(err.message || 'Failed to load chapters');
+    } finally {
+      setChaptersLoading(false);
     }
   };
 
@@ -93,6 +107,10 @@ const Quizzes: React.FC = () => {
   useEffect(() => {
     if (selectedCourseId) {
       fetchChaptersByCourse(selectedCourseId);
+    } else {
+      setChapters([]);
+      setChaptersError('');
+      setChaptersLoading(false);
     }
   }, [selectedCourseId]);
 
@@ -158,7 +176,13 @@ const Quizzes: React.FC = () => {
       return;
     }
 
-    if (!newQuiz.chapter_id) {
+    // Only require chapter selection if chapters are available for the selected course
+    if (!selectedCourseId) {
+      setError("Course selection is required");
+      return;
+    }
+
+    if (!newQuiz.chapter_id && chapters.length > 0) {
       setError("Chapter selection is required");
       return;
     }
@@ -174,12 +198,19 @@ const Quizzes: React.FC = () => {
     try {
       const quizData = {
         ...newQuiz,
+        // Set chapter_id to null if no chapters are available (course-level quiz)
+        chapter_id: newQuiz.chapter_id || null,
+        // Add course_id for course-level quizzes
+        course_id: chapters.length === 0 ? selectedCourseId : undefined,
         questions_data: {
           questions: questions
         }
       };
 
-      const createdQuiz = await quizService.createQuiz(quizData);
+      const createdQuiz = await quizService.createQuiz({
+        ...quizData,
+        chapter_id: quizData.chapter_id || undefined // Convert null to undefined
+      });
       if (createdQuiz) {
         setQuizzes((prev) => [createdQuiz, ...prev]);
         setShowAddModal(false);
@@ -303,7 +334,29 @@ const Quizzes: React.FC = () => {
         </div>
         <div className="mt-4 sm:mt-0">
           <Button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => {
+              setShowAddModal(true);
+              // Reset all state when opening modal
+              setSelectedCourseId('');
+              setChapters([]);
+              setChaptersLoading(false);
+              setChaptersError('');
+              setError('');
+              setNewQuiz({
+                title: '',
+                description: '',
+                chapter_id: '',
+                questions_data: { questions: [] }
+              });
+              setQuestions([{
+                id: 1,
+                question: '',
+                type: 'multiple_choice',
+                options: ['', '', '', ''],
+                correct_answer: 0,
+                points: 1
+              }]);
+            }}
             className="inline-flex items-center"
           >
             <PlusIcon className="h-4 w-4 mr-2" />
@@ -419,10 +472,10 @@ const Quizzes: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      {quiz.chapters?.title || 'N/A'}
+                      {quiz.chapters?.title || (quiz.course_id ? 'Course-level' : 'N/A')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      {quiz.chapters?.courses?.title || 'N/A'}
+                      {quiz.chapters?.courses?.title || (quiz.course_id ? quiz.chapters?.courses?.title : 'N/A')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
@@ -473,7 +526,29 @@ const Quizzes: React.FC = () => {
             </p>
             {!searchTerm && (
               <div className="mt-6">
-                <Button onClick={() => setShowAddModal(true)}>
+                <Button onClick={() => {
+                  setShowAddModal(true);
+                  // Reset all state when opening modal
+                  setSelectedCourseId('');
+                  setChapters([]);
+                  setChaptersLoading(false);
+                  setChaptersError('');
+                  setError('');
+                  setNewQuiz({
+                    title: '',
+                    description: '',
+                    chapter_id: '',
+                    questions_data: { questions: [] }
+                  });
+                  setQuestions([{
+                    id: 1,
+                    question: '',
+                    type: 'multiple_choice',
+                    options: ['', '', '', ''],
+                    correct_answer: 0,
+                    points: 1
+                  }]);
+                }}>
                   <PlusIcon className="h-4 w-4 mr-2" />
                   Add Quiz
                 </Button>
@@ -553,16 +628,23 @@ const Quizzes: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Chapter *
+                  Chapter {chapters.length > 0 ? '*' : '(Optional)'}
                 </label>
                 <select
                   value={newQuiz.chapter_id}
                   onChange={(e) => setNewQuiz({ ...newQuiz, chapter_id: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                  required
-                  disabled={!selectedCourseId}
+                  required={chapters.length > 0}
+                  disabled={!selectedCourseId || chaptersLoading}
                 >
-                  <option value="">Select a chapter</option>
+                  <option value="">
+                    {chaptersLoading 
+                      ? 'Loading chapters...' 
+                      : chapters.length === 0 && selectedCourseId && !chaptersLoading
+                      ? 'No chapters available - Quiz will be course-level'
+                      : 'Select a chapter'
+                    }
+                  </option>
                   {chapters.map((chapter) => (
                     <option key={chapter.chapter_id} value={chapter.chapter_id}>
                       {chapter.title}
@@ -573,6 +655,23 @@ const Quizzes: React.FC = () => {
                   <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                     Please select a course first
                   </p>
+                )}
+                {chaptersLoading && (
+                  <p className="mt-1 text-sm text-blue-600 dark:text-blue-400">
+                    Loading chapters...
+                  </p>
+                )}
+                {chaptersError && (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                    {chaptersError}
+                  </p>
+                )}
+                {selectedCourseId && !chaptersLoading && chapters.length === 0 && !chaptersError && (
+                  <div className="mt-1 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                      <strong>Course-level Quiz:</strong> This course has no chapters yet. The quiz will be associated with the entire course.
+                    </p>
+                  </div>
                 )}
               </div>
 
@@ -706,6 +805,9 @@ const Quizzes: React.FC = () => {
                       points: 1
                     }]);
                     setSelectedCourseId('');
+                    setChapters([]);
+                    setChaptersLoading(false);
+                    setChaptersError('');
                   }}
                 >
                   Cancel
@@ -756,7 +858,13 @@ const Quizzes: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Chapter
                   </label>
-                  <p className="text-sm text-gray-900 dark:text-white">{selectedQuiz.chapters?.title || 'N/A'}</p>
+                  <p className="text-sm text-gray-900 dark:text-white">{selectedQuiz.chapters?.title || (selectedQuiz.course_id ? 'Course-level Quiz' : 'N/A')}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Course
+                  </label>
+                  <p className="text-sm text-gray-900 dark:text-white">{selectedQuiz.chapters?.courses?.title || 'N/A'}</p>
                 </div>
               </div>
 

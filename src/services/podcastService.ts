@@ -69,7 +69,6 @@ class PodcastService {
     onProgress?: (progress: UploadProgress) => void
   ): Promise<Podcast> {
     try {
-      console.log('📝 Podcast service input:', podcastData);
       
       const formData = new FormData();
       formData.append('title', podcastData.title);

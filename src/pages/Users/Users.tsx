@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { userService, type UserFilters } from '../../services/userService';
+import { userService, type UserFilters, type CreateUserData } from '../../services/userService';
 import type { User } from '../../types';
 import Button from '../../components/ui/Button';
 import Card, { CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
@@ -11,6 +11,8 @@ import {
   EnvelopeIcon,
   CalendarIcon,
   ShieldCheckIcon,
+  PlusIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 
 const Users: React.FC = () => {
@@ -23,8 +25,19 @@ const Users: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
+  
+  // Add User Modal State
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [addUserLoading, setAddUserLoading] = useState(false);
+  const [addUserError, setAddUserError] = useState('');
+  const [addUserSuccess, setAddUserSuccess] = useState('');
+  const [newUserData, setNewUserData] = useState<CreateUserData>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    role: 'STUDENT'
+  });
 
-  // Add the missing badge functions
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       active: { bg: 'bg-green-100', text: 'text-green-800', label: 'Active' },
@@ -133,8 +146,42 @@ const Users: React.FC = () => {
     }
   };
 
-  // Remove handleCreateUser function entirely
-  // const handleCreateUser = async (e: React.FormEvent) => { ... }
+  // Add User Handler
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddUserLoading(true);
+    setAddUserError('');
+    setAddUserSuccess('');
+
+    try {
+      const response = await userService.createUser(newUserData);
+      
+      if (response.success) {
+        setAddUserSuccess('User created successfully! Login credentials have been sent to their email.');
+        setNewUserData({
+          firstName: '',
+          lastName: '',
+          email: '',
+          role: 'STUDENT'
+        });
+        
+        // Refresh users list
+        await fetchUsers();
+        
+        // Close modal after 2 seconds
+        setTimeout(() => {
+          setShowAddUserModal(false);
+          setAddUserSuccess('');
+        }, 2000);
+      } else {
+        setAddUserError(response.message || 'Failed to create user');
+      }
+    } catch (err: any) {
+      setAddUserError(err.response?.data?.error?.message || err.message || 'An error occurred while creating the user');
+    } finally {
+      setAddUserLoading(false);
+    }
+  };
 
   if (loading && users.length === 0) {
     return (
@@ -146,7 +193,7 @@ const Users: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header - Remove Add New User button */}
+      {/* Header - Add back the Add New User button */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Users</h1>
@@ -154,7 +201,14 @@ const Users: React.FC = () => {
             Manage user accounts and permissions ({totalUsers} total)
           </p>
         </div>
-        {/* Remove the Add New User button */}
+        <Button
+          variant="primary"
+          onClick={() => setShowAddUserModal(true)}
+          className="flex items-center space-x-2"
+        >
+          <PlusIcon className="w-5 h-5" />
+          <span>Add New User</span>
+        </Button>
       </div>
 
       {/* Filters */}
@@ -359,7 +413,7 @@ const Users: React.FC = () => {
         </Card>
       )}
 
-      {/* Empty State - Remove Add New User button */}
+      {/* Empty State - Add back the Add New User button */}
       {!loading && users.length === 0 && (
         <Card variant="default" padding="xl">
           <div className="text-center py-12">
@@ -372,13 +426,136 @@ const Users: React.FC = () => {
                 ? 'Try adjusting your filters to see more results.'
                 : 'No users available to display.'}
             </p>
-            {/* Remove the Add New User button */}
           </div>
         </Card>
       )}
 
-      {/* Remove the entire Add User Modal */}
-      {/* {showAddUserModal && ( ... )} */}
+      {/* Add User Modal */}
+      {showAddUserModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Add New User
+              </h2>
+              <button
+                onClick={() => {
+                  setShowAddUserModal(false);
+                  setAddUserError('');
+                  setAddUserSuccess('');
+                  setNewUserData({
+                    firstName: '',
+                    lastName: '',
+                    email: '',
+                    role: 'STUDENT'
+                  });
+                }}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            {addUserError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {addUserError}
+              </div>
+            )}
+
+            {addUserSuccess && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+                {addUserSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  First Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newUserData.firstName}
+                  onChange={(e) => setNewUserData({ ...newUserData, firstName: e.target.value })}
+                  className="input w-full"
+                  placeholder="Enter first name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Last Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newUserData.lastName}
+                  onChange={(e) => setNewUserData({ ...newUserData, lastName: e.target.value })}
+                  className="input w-full"
+                  placeholder="Enter last name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={newUserData.email}
+                  onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
+                  className="input w-full"
+                  placeholder="Enter email address"
+                />
+              </div>
+
+              <div className="flex space-x-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowAddUserModal(false);
+                    setAddUserError('');
+                    setAddUserSuccess('');
+                    setNewUserData({
+                      firstName: '',
+                      lastName: '',
+                      email: '',
+                      role: 'STUDENT'
+                    });
+                  }}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={addUserLoading}
+                  className="flex-1"
+                >
+                  {addUserLoading ? (
+                    <div className="flex items-center space-x-2">
+                      <LoadingSpinner size="sm" />
+                      <span>Creating...</span>
+                    </div>
+                  ) : (
+                    'Create User'
+                  )}
+                </Button>
+              </div>
+            </form>
+
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-700">
+                <strong>Note:</strong> A temporary password will be generated and sent to the user's email address along with login instructions.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

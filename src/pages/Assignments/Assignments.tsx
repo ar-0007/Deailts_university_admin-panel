@@ -203,7 +203,7 @@ const Assignments: React.FC = () => {
   const filteredAssignments = assignments.filter(assignment => {
     const matchesSearch =
       assignment.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      assignment.courses?.title.toLowerCase().includes(searchTerm.toLowerCase());
+      assignment.course?.title.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesStatus = filterStatus === 'all' ||
       (filterStatus === 'published' ? assignment.is_published : !assignment.is_published);
@@ -350,7 +350,7 @@ const Assignments: React.FC = () => {
                       Title :   {assignment.title}
                       </h3>
                       <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                        Course : {assignment.courses?.title || 'No course'}
+                        Course : {assignment.course?.title || 'No course'}
                       </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
                        Description : {assignment.description}
@@ -557,7 +557,7 @@ const Assignments: React.FC = () => {
             <div className="p-6 space-y-4">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{selectedAssignment.title}</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Course: {selectedAssignment.courses?.title || 'N/A'}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Course: {selectedAssignment.course?.title || 'N/A'}</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">{selectedAssignment.description}</p>
               </div>
               <div className="grid grid-cols-2 gap-4 text-sm">

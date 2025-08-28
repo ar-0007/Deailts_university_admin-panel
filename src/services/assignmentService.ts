@@ -15,11 +15,11 @@ export interface Assignment {
   is_published: boolean; // Add this field
   created_at: string;
   updated_at: string;
-  courses?: {
+  course?: {
     title: string;
     description?: string;
   };
-  chapters?: {
+  chapter?: {
     title: string;
     description?: string;
   };

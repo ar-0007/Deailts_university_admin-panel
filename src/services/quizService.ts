@@ -3,7 +3,8 @@ import api from './api';
 
 export interface Quiz {
   quiz_id: string;
-  chapter_id: string;
+  chapter_id?: string;
+  course_id?: string;
   title: string;
   description?: string;
   questions_data: any; // JSONB data containing quiz questions
@@ -22,7 +23,8 @@ export interface Quiz {
 export interface CreateQuizData {
   title: string;
   description?: string;
-  chapter_id: string;
+  chapter_id?: string;
+  course_id?: string;
   questions_data: any;
 }
 
@@ -51,11 +53,26 @@ class QuizService {
 
   async createQuiz(quizData: CreateQuizData): Promise<Quiz> {
     try {
+      console.log('Creating quiz with data:', quizData);
+      
+      // Validate that either chapter_id or course_id is provided
+      if (!quizData.chapter_id && !quizData.course_id) {
+        throw new Error('Either chapter_id or course_id must be provided');
+      }
+      
       const response = await api.post(this.baseURL, quizData);
+      console.log('Quiz creation response:', response.data);
       return response.data.data;
     } catch (error: any) {
       console.error('Error creating quiz:', error);
-      throw new Error(error.response?.data?.error?.message || 'Failed to create quiz');
+      console.error('Quiz data that failed:', quizData);
+      console.error('Error response:', error.response?.data);
+      
+      const errorMessage = error.response?.data?.error?.message || 
+                          error.response?.data?.message || 
+                          error.message || 
+                          'Failed to create quiz';
+      throw new Error(errorMessage);
     }
   }
 
